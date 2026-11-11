@@ -12,6 +12,7 @@ venv/
 .env.*
 !.env.example
 agent_config.yaml
+!agent_config.yaml.example
 secrets/
 *.pem
 

@@ -1,0 +1,569 @@
+"""
+Unit tests for backend/agents/data_agent.py.
+Tests the Data Collector Agent in isolation with mock HTTP clients.
+"""
+
+from unittest.mock import AsyncMock, patch
+import httpx
+import pytest
+
+from backend.agents.data_agent import (
+    AGENT_CAPABILITIES,
+    AGENT_NAME,
+    AGENT_STATUS,
+    DataCollectorResponseError,
+    DataCollectorTimeoutError,
+    DataCollectorUpstreamError,
+    build_wikipedia_url,
+    check_source_relevance,
+    clean_html_snippet,
+    clean_wiki_markup_and_html,
+    collect_research,
+    fetch_page_extracts,
+    is_navigation_or_empty,
+    truncate_snippet,
+)
+
+
+@pytest.mark.asyncio
+async def test_collect_research_success():
+    """Verify collect_research returns formatted data when API succeeds."""
+    mock_payload = {
+        "query": {
+            "search": [
+                {
+                    "title": "Natural Language Processing",
+                    "snippet": "NLP is a subfield of <span class=\"searchmatch\">linguistics</span>.",
+                    "pageid": 21652,
+                }
+            ]
+        }
+    }
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+
+        result = await collect_research("Natural Language Processing", limit=1)
+
+        assert result["agent"] == AGENT_NAME
+        assert result["query"] == "Natural Language Processing"
+        assert result["result_count"] == 1
+        assert result["total_results"] == 1
+        assert "retrieved_at" in result
+        assert len(result["results"]) == 1
+
+        item = result["results"][0]
+        assert item["title"] == "Natural Language Processing"
+        assert item["snippet"] == "NLP is a subfield of linguistics."
+        assert "Natural_Language_Processing" in item["source_url"]
+        assert item["source"] == item["source_url"]
+        assert "retrieved_at" in item
+
+
+@pytest.mark.asyncio
+async def test_collect_research_empty():
+    """Verify collect_research handles zero results cleanly."""
+    mock_payload = {"query": {"search": []}}
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+
+        result = await collect_research("xyz_unknown_query_99999", limit=5)
+
+        assert result["result_count"] == 0
+        assert result["total_results"] == 0
+        assert result["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_collect_research_with_provided_client():
+    """Verify collect_research works with an explicitly provided AsyncClient."""
+    mock_payload = {"query": {"search": []}}
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get.return_value = mock_resp
+
+    result = await collect_research("provided client query", limit=3, client=mock_client)
+    assert result["result_count"] == 0
+    mock_client.get.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_query", ["", "   ", "a" * 301])
+async def test_collect_research_query_validation(invalid_query):
+    """Verify collect_research raises ValueError on invalid queries."""
+    with pytest.raises(ValueError):
+        await collect_research(invalid_query)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_limit", [0, -1, 11, 100])
+async def test_collect_research_limit_validation(invalid_limit):
+    """Verify collect_research raises ValueError on invalid limits."""
+    with pytest.raises(ValueError):
+        await collect_research("valid query", limit=invalid_limit)
+
+
+@pytest.mark.asyncio
+async def test_collect_research_timeout_error():
+    """Verify collect_research raises DataCollectorTimeoutError on timeout."""
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = httpx.ConnectTimeout("Connection timed out")
+
+        with pytest.raises(DataCollectorTimeoutError):
+            await collect_research("Timeout query")
+
+
+@pytest.mark.asyncio
+async def test_collect_research_upstream_http_status_error():
+    """Verify collect_research raises DataCollectorUpstreamError on 5xx."""
+    mock_resp = httpx.Response(
+        status_code=500,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(DataCollectorUpstreamError):
+            await collect_research("500 error query")
+
+
+@pytest.mark.asyncio
+async def test_collect_research_upstream_request_error():
+    """Verify collect_research raises DataCollectorUpstreamError on network error."""
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = httpx.NetworkError("Host unreachable")
+
+        with pytest.raises(DataCollectorUpstreamError):
+            await collect_research("Network error query")
+
+
+@pytest.mark.asyncio
+async def test_collect_research_mediawiki_error_payload():
+    """Verify collect_research handles MediaWiki API error payload."""
+    mock_payload = {
+        "error": {
+            "code": "badeval",
+            "info": "The search parameter is invalid."
+        }
+    }
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(DataCollectorUpstreamError) as exc_info:
+            await collect_research("Error query")
+        assert "The search parameter is invalid" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_collect_research_invalid_json():
+    """Verify collect_research raises DataCollectorResponseError on bad JSON."""
+    mock_resp = httpx.Response(
+        status_code=200,
+        content=b"Not valid JSON {",
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(DataCollectorResponseError):
+            await collect_research("Bad JSON query")
+
+
+def test_clean_html_snippet():
+    """Verify HTML cleaning strips markup and unescapes entities."""
+    raw = '<span class="searchmatch">Artificial</span> &quot;Intelligence&quot; &amp; Machine Learning'
+    cleaned = clean_html_snippet(raw)
+    assert cleaned == 'Artificial "Intelligence" & Machine Learning'
+
+    assert clean_html_snippet("") == ""
+    assert clean_html_snippet(None) == ""
+
+
+def test_build_wikipedia_url():
+    """Verify Wikipedia URL builder formats and escapes titles properly."""
+    assert build_wikipedia_url("Deep Learning") == "https://en.wikipedia.org/wiki/Deep_Learning"
+    assert build_wikipedia_url("C++") == "https://en.wikipedia.org/wiki/C%2B%2B"
+    assert build_wikipedia_url("Café") == "https://en.wikipedia.org/wiki/Caf%C3%A9"
+
+
+def test_metadata_constants():
+    """Verify agent constants and capabilities."""
+    assert AGENT_NAME == "Data Collector Agent"
+    assert AGENT_STATUS == "operational"
+    assert "wikipedia_search" in AGENT_CAPABILITIES
+    assert "asynchronous_data_retrieval" in AGENT_CAPABILITIES
+
+
+@pytest.mark.asyncio
+async def test_collect_research_quantum_computing_relevance():
+    """
+    Verify that 'quantum computing' query returns relevant search results,
+    preserves HTTPS Wikipedia URLs, and does not fabricate sources or snippets.
+    """
+    mock_payload = {
+        "query": {
+            "search": [
+                {
+                    "title": "Quantum computing",
+                    "snippet": "<span class=\"searchmatch\">Quantum</span> computing is a rapidly-emerging technology.",
+                    "pageid": 24503,
+                },
+                {
+                    "title": "Quantum computer",
+                    "snippet": "A <span class=\"searchmatch\">quantum</span> computer is a computer that exploits quantum mechanical phenomena.",
+                    "pageid": 25680,
+                },
+            ]
+        }
+    }
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+
+    with patch.object(httpx.AsyncClient, "get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+
+        result = await collect_research("quantum computing", limit=2)
+
+        # Verify call params sent to MediaWiki API for search
+        assert mock_get.await_count >= 1
+        call_kwargs = mock_get.await_args_list[0].kwargs
+        assert call_kwargs["params"]["srsearch"] == "quantum computing"
+        assert call_kwargs["params"]["srlimit"] == 2
+
+        # Verify structured outputs
+        assert result["query"] == "quantum computing"
+        assert result["result_count"] == 2
+        assert len(result["results"]) == 2
+
+        # Verify first item
+        item0 = result["results"][0]
+        assert item0["title"] == "Quantum computing"
+        assert item0["snippet"] == "Quantum computing is a rapidly-emerging technology."
+        assert item0["source_url"] == "https://en.wikipedia.org/wiki/Quantum_computing"
+        assert item0["source_url"].startswith("https://en.wikipedia.org/wiki/")
+
+        # Verify second item
+        item1 = result["results"][1]
+        assert item1["title"] == "Quantum computer"
+        assert item1["source_url"] == "https://en.wikipedia.org/wiki/Quantum_computer"
+        assert item1["source_url"].startswith("https://en.wikipedia.org/wiki/")
+
+
+def test_clean_wiki_markup_and_html():
+    """Verify clean_wiki_markup_and_html cleans tags, links, templates, citations, and entities."""
+    raw = (
+        "<b>Quantum computing</b> is a field &amp; paradigm. "
+        "{{cite book}} It uses [[Qubit|qubits]] [http://example.com external] "
+        "and [1][note 2] phenomena. == Overview =="
+    )
+    cleaned = clean_wiki_markup_and_html(raw)
+    assert "<b>" not in cleaned
+    assert "&amp;" not in cleaned
+    assert "&" in cleaned
+    assert "{{cite book}}" not in cleaned
+    assert "qubits" in cleaned
+    assert "[[Qubit" not in cleaned
+    assert "[1]" not in cleaned
+    assert "[note 2]" not in cleaned
+    assert "== Overview ==" not in cleaned
+    assert "Quantum computing is a field & paradigm." in cleaned
+
+
+def test_is_navigation_or_empty():
+    """Verify is_navigation_or_empty correctly flags stubs, jump links, and disambiguation."""
+    assert is_navigation_or_empty("") is True
+    assert is_navigation_or_empty("   ") is True
+    assert is_navigation_or_empty("short text") is True  # < 15 chars
+    assert is_navigation_or_empty("Quantum computing may refer to: physics, computer science.") is True
+    assert is_navigation_or_empty("Jump to navigation Jump to search") is True
+    assert is_navigation_or_empty("This is a disambiguation page for other uses, see below.") is True
+    assert is_navigation_or_empty(
+        "Quantum computing is a rapidly-emerging technology that harnesses the laws of quantum mechanics."
+    ) is False
+
+
+def test_truncate_snippet():
+    """Verify snippet length truncation enforces bounds cleanly."""
+    text = (
+        "Quantum computing is a rapidly-emerging technology. "
+        "It harnesses the laws of quantum mechanics to solve problems too complex for classical computers. "
+        "Today, hardware is accessible to thousands of developers."
+    )
+    truncated_short = truncate_snippet(text, max_length=60)
+    assert len(truncated_short) <= 60
+    assert truncated_short.endswith(".") or truncated_short.endswith("...")
+
+    # Text under limit is unchanged
+    assert truncate_snippet("Short snippet", max_length=100) == "Short snippet"
+
+
+def test_check_source_relevance_direct_match():
+    """Verify check_source_relevance marks direct title or core term matches as relevant."""
+    rel, is_weak, reason = check_source_relevance(
+        query="quantum computing",
+        title="Quantum computing",
+        snippet="An introduction to quantum computational hardware.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+    assert "directly matches" in reason.lower()
+
+    # Core term in title with extract coverage
+    rel, is_weak, reason = check_source_relevance(
+        query="neural network",
+        title="Neural network models",
+        snippet="This paper reviews neural network architectures for classification.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+
+
+def test_check_source_relevance_weak_match():
+    """Verify check_source_relevance flags weakly related or peripheral sources."""
+    # Only 1 of 2 terms matched
+    rel, is_weak, reason = check_source_relevance(
+        query="quantum cryptography",
+        title="Classical cryptography",
+        snippet="Historical overview of ciphers and public key algorithms.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "Weakly related" in reason
+
+    # Zero terms matched
+    rel, is_weak, reason = check_source_relevance(
+        query="artificial intelligence",
+        title="Baking bread",
+        snippet="Flour, yeast, salt, and water are the four basic ingredients.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "Weakly related" in reason
+
+
+def test_check_source_relevance_incidental_entities_and_lists():
+    """
+    Phase 3.3 Regression tests:
+    Incidental entities/people/vendors and peripheral lists lacking query topic in title
+    must be classified as weakly_relevant.
+    """
+    # 1. Incidental person/physicist (zero query terms in title)
+    rel, is_weak, reason = check_source_relevance(
+        query="quantum computing",
+        title="Michael J. Biercuk",
+        snippet="Michael J. Biercuk is an experimental physicist specializing in quantum computing and quantum technology.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "contains none of the query terms" in reason
+
+    # 2. Incidental company/vendor (zero query terms in title)
+    rel, is_weak, reason = check_source_relevance(
+        query="quantum computing",
+        title="Keysight",
+        snippet="Keysight Technologies produces electronic test and measurement equipment used in quantum computing.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "contains none of the query terms" in reason
+
+    # 3. Peripheral list article lacking core query topic in title
+    rel, is_weak, reason = check_source_relevance(
+        query="quantum computing",
+        title="List of vacuum-tube computers",
+        snippet="This is a list of vacuum-tube computers. In contrast to modern quantum computing devices...",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "index or list" in reason.lower()
+
+    # 4. Directly relevant articles
+    for directly_relevant_title in ("Quantum computing", "Quantum computer", "Quantum algorithm"):
+        rel, is_weak, _ = check_source_relevance(
+            query="quantum computing",
+            title=directly_relevant_title,
+            snippet="Overview of quantum computation and mechanical algorithms.",
+        )
+        assert rel == "relevant"
+        assert is_weak is False
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_extracts_success():
+    """Verify fetch_page_extracts parses introductory extracts and resolves redirects."""
+    mock_payload = {
+        "query": {
+            "pages": {
+                "100": {
+                    "pageid": 100,
+                    "title": "Quantum computing",
+                    "extract": "Quantum computing is a rapidly-emerging technology.",
+                }
+            },
+            "redirects": [
+                {"from": "Quantum computer", "to": "Quantum computing"}
+            ]
+        }
+    }
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get.return_value = mock_resp
+
+    extracts = await fetch_page_extracts(["Quantum computing", "Quantum computer"], mock_client)
+    assert "quantum computing" in extracts
+    assert "quantum computer" in extracts
+    assert "Quantum computing is a rapidly-emerging technology." in extracts["quantum computing"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_extracts_missing_page():
+    """Verify fetch_page_extracts handles missing pages safely."""
+    mock_payload = {
+        "query": {
+            "pages": {
+                "-1": {
+                    "ns": 0,
+                    "title": "Non-existent Page",
+                    "missing": "",
+                }
+            }
+        }
+    }
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=mock_payload,
+        request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")
+    )
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get.return_value = mock_resp
+
+    extracts = await fetch_page_extracts(["Non-existent Page"], mock_client)
+    # Missing pages have empty extract string
+    assert extracts.get("non-existent page", "") == ""
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_extracts_network_error_handled():
+    """Verify fetch_page_extracts returns empty dict on HTTP error without crashing."""
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get.side_effect = httpx.RequestError("Connection reset")
+
+    extracts = await fetch_page_extracts(["Quantum computing"], mock_client)
+    assert extracts == {}
+
+
+@pytest.mark.asyncio
+async def test_collect_research_with_extracts_and_provenance():
+    """Verify collect_research merges introductory extracts and records provenance."""
+    search_payload = {
+        "query": {
+            "search": [
+                {
+                    "title": "Quantum computing",
+                    "snippet": "<span class=\"searchmatch\">Quantum</span> snippet...",
+                    "pageid": 100,
+                }
+            ]
+        }
+    }
+    extracts_payload = {
+        "query": {
+            "pages": {
+                "100": {
+                    "pageid": 100,
+                    "title": "Quantum computing",
+                    "extract": "Quantum computing is a rapidly-emerging technology.",
+                }
+            }
+        }
+    }
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get.side_effect = [
+        httpx.Response(status_code=200, json=search_payload, request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")),
+        httpx.Response(status_code=200, json=extracts_payload, request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")),
+    ]
+
+    result = await collect_research("quantum computing", limit=1, client=mock_client)
+    assert result["result_count"] == 1
+    item = result["results"][0]
+    assert item["source_type"] == "wikipedia_extract"
+    assert "rapidly-emerging technology" in item["snippet"]
+    assert item["relevance"] == "relevant"
+    assert item["is_weakly_relevant"] is False
+    assert item["source_url"] == "https://en.wikipedia.org/wiki/Quantum_computing"
+    assert "retrieved_at" in item
+
+
+@pytest.mark.asyncio
+async def test_collect_research_navigation_extract_fallback():
+    """Verify collect_research falls back to search snippet when extract is navigation-only."""
+    search_payload = {
+        "query": {
+            "search": [
+                {
+                    "title": "Quantum disambiguation",
+                    "snippet": "Substantive fallback snippet describing quantum theory.",
+                    "pageid": 200,
+                }
+            ]
+        }
+    }
+    extracts_payload = {
+        "query": {
+            "pages": {
+                "200": {
+                    "pageid": 200,
+                    "title": "Quantum disambiguation",
+                    "extract": "Quantum disambiguation may refer to: jump to navigation.",
+                }
+            }
+        }
+    }
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get.side_effect = [
+        httpx.Response(status_code=200, json=search_payload, request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")),
+        httpx.Response(status_code=200, json=extracts_payload, request=httpx.Request("GET", "https://en.wikipedia.org/w/api.php")),
+    ]
+
+    result = await collect_research("quantum theory", limit=1, client=mock_client)
+    assert result["result_count"] == 1
+    item = result["results"][0]
+    # Disambiguation extract filtered -> fallback to snippet
+    assert item["source_type"] == "wikipedia_search_snippet"
+    assert "Substantive fallback snippet" in item["snippet"]
+
+
+

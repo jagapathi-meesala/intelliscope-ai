@@ -1,0 +1,31 @@
+{
+  "agent": "Data Collector Agent",
+  "agent_name": "Data Collector Agent",
+  "query": "Artificial intelligence",
+  "result_count": 3,
+  "total_results": 3,
+  "retrieved_at": "2026-11-04T20:09:10.489960+00:00",
+  "results": [
+    {
+      "title": "Artificial intelligence",
+      "snippet": "Artificial intelligence (AI) is the capability of computational systems to perform tasks typically associated with human intelligence, such as learning",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+      "source": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+      "retrieved_at": "2026-11-04T20:09:10.489960+00:00"
+    },
+    {
+      "title": "A.I. Artificial Intelligence",
+      "snippet": "A.I. Artificial Intelligence (or simply A.I.) is a 2001 American science fiction drama film written and directed by Steven Spielberg. The screenplay by",
+      "source_url": "https://en.wikipedia.org/wiki/A.I._Artificial_Intelligence",
+      "source": "https://en.wikipedia.org/wiki/A.I._Artificial_Intelligence",
+      "retrieved_at": "2026-11-04T20:09:10.489960+00:00"
+    },
+    {
+      "title": "Artificial general intelligence",
+      "snippet": "Artificial general intelligence (AGI) is a hypothetical type of artificial intelligence that matches or surpasses human capabilities across virtually",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
+      "source": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
+      "retrieved_at": "2026-11-04T20:09:10.489960+00:00"
+    }
+  ]
+}

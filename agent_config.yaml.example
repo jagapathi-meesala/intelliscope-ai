@@ -1,0 +1,8 @@
+# Example BAND Agent Configuration for IntelliScope AI
+# Copy this file to agent_config.yaml and supply your real BAND credentials:
+#   cp agent_config.yaml.example agent_config.yaml
+
+data_collector:
+  agent_id: "your-band-agent-id-here"
+  api_key: "your-band-api-key-here"
+

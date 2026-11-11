@@ -1,0 +1,84 @@
+{
+  "agent": "Insight Analyst Agent",
+  "agent_name": "Insight Analyst Agent",
+  "topic": "Artificial intelligence",
+  "analyzed_at": "2026-11-04T20:09:10.499123+00:00",
+  "total_sources_evaluated": 3,
+  "eligible_sources_count": 3,
+  "excluded_sources_count": 0,
+  "executive_summary": "Synthesized research on 'Artificial intelligence' across 3 verified source(s). Primary thematic focus centers on 'Foundations & Theoretical Concepts', 'Ethics, Governance & Future Horizons', 'Systems, Architectures & Methods', with recurring terminology including intelligence, artificial, human, general, capability. Initial evidence from 'Artificial intelligence' establishes that Artificial intelligence (AI) is the capability of computational systems to perform tasks typically associated with human intelligence, such as learning.",
+  "key_themes": [
+    {
+      "theme": "Foundations & Theoretical Concepts",
+      "description": "Fundamental principles, formal definitions, and theoretical underpinnings.",
+      "frequency": 3,
+      "sources": [
+        "https://en.wikipedia.org/wiki/Artificial_intelligence",
+        "https://en.wikipedia.org/wiki/A.I._Artificial_Intelligence",
+        "https://en.wikipedia.org/wiki/Artificial_general_intelligence"
+      ]
+    },
+    {
+      "theme": "Ethics, Governance & Future Horizons",
+      "description": "Societal implications, governance frameworks, and future trajectory analysis.",
+      "frequency": 2,
+      "sources": [
+        "https://en.wikipedia.org/wiki/Artificial_intelligence",
+        "https://en.wikipedia.org/wiki/Artificial_general_intelligence"
+      ]
+    },
+    {
+      "theme": "Systems, Architectures & Methods",
+      "description": "Algorithmic architectures, computational methods, and engineering systems.",
+      "frequency": 1,
+      "sources": [
+        "https://en.wikipedia.org/wiki/Artificial_intelligence"
+      ]
+    }
+  ],
+  "important_keywords": [
+    "intelligence",
+    "artificial",
+    "human",
+    "general",
+    "capability",
+    "computational",
+    "systems",
+    "perform"
+  ],
+  "evidence_backed_observations": [
+    {
+      "statement": "According to 'Artificial intelligence': Artificial intelligence (AI) is the capability of computational systems to perform tasks typically associated with human intelligence, such as learning.",
+      "source_title": "Artificial intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+      "confidence": "high"
+    },
+    {
+      "statement": "According to 'A.I. Artificial Intelligence': A.I. Artificial Intelligence (or simply A.I.) is a 2001 American science fiction drama film written and directed by Steven Spielberg. The screenplay by.",
+      "source_title": "A.I. Artificial Intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/A.I._Artificial_Intelligence",
+      "confidence": "high"
+    },
+    {
+      "statement": "According to 'Artificial general intelligence': Artificial general intelligence (AGI) is a hypothetical type of artificial intelligence that matches or surpasses human capabilities across virtually.",
+      "source_title": "Artificial general intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
+      "confidence": "high"
+    }
+  ],
+  "information_gaps": [
+    "Evidence is derived from encyclopedia summary snippets rather than full primary papers.",
+    "Real-time chronological updates and empirical performance metrics are unrepresented in snippets."
+  ],
+  "recommendations": [
+    "Deepen primary literature review specifically targeting 'Foundations & Theoretical Concepts'.",
+    "Expand query retrieval using specific extracted keywords: intelligence, artificial, human, general.",
+    "Conduct multi-source fact cross-referencing against peer-reviewed journals."
+  ],
+  "limitations": [
+    "Analysis relies on deterministic lexical extraction, keyword frequency weighting, and rule-based clustering without generative LLM extrapolation.",
+    "Findings are constrained strictly to text snippets verified by the Research Verification Agent.",
+    "Structural validity confirms protocol and domain compliance, not infallible factual truth."
+  ],
+  "methodology": "Deterministic keyword extraction, frequency analysis, and rule-based theme clustering. No generative LLM extrapolation."
+}

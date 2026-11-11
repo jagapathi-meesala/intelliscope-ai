@@ -1,0 +1,79 @@
+{
+  "agent": "Research Verification Agent",
+  "agent_name": "Research Verification Agent",
+  "query": "Artificial intelligence",
+  "verified_at": "2026-11-04T20:09:10.495720+00:00",
+  "total_results": 3,
+  "valid_results_count": 3,
+  "invalid_results_count": 0,
+  "quality_score": 100.0,
+  "status": "passed",
+  "verification_type": "structural_and_source_integrity",
+  "is_factually_verified": false,
+  "factual_accuracy_disclaimer": "This verification evaluates structural integrity, URL protocol compliance, domain whitelist adherence, timestamp validity, and deduplication. It does NOT assert that the factual claims within snippets are verified facts.",
+  "summary": {
+    "total_checks": 21,
+    "passed_checks": 21,
+    "failed_checks": 0,
+    "warning_count": 0,
+    "error_count": 0,
+    "duplicate_urls_count": 0,
+    "duplicate_titles_count": 0
+  },
+  "results": [
+    {
+      "index": 0,
+      "title": "Artificial intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+      "status": "valid",
+      "item_score": 100.0,
+      "checks": {
+        "title_valid": true,
+        "snippet_valid": true,
+        "https_valid": true,
+        "domain_allowed": true,
+        "timestamp_valid": true,
+        "is_duplicate_url": false,
+        "is_duplicate_title": false
+      },
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "index": 1,
+      "title": "A.I. Artificial Intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/A.I._Artificial_Intelligence",
+      "status": "valid",
+      "item_score": 100.0,
+      "checks": {
+        "title_valid": true,
+        "snippet_valid": true,
+        "https_valid": true,
+        "domain_allowed": true,
+        "timestamp_valid": true,
+        "is_duplicate_url": false,
+        "is_duplicate_title": false
+      },
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "index": 2,
+      "title": "Artificial general intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
+      "status": "valid",
+      "item_score": 100.0,
+      "checks": {
+        "title_valid": true,
+        "snippet_valid": true,
+        "https_valid": true,
+        "domain_allowed": true,
+        "timestamp_valid": true,
+        "is_duplicate_url": false,
+        "is_duplicate_title": false
+      },
+      "errors": [],
+      "warnings": []
+    }
+  ]
+}

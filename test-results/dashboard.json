@@ -1,0 +1,202 @@
+{
+  "agent": "Dashboard Builder Agent",
+  "agent_name": "Dashboard Builder Agent",
+  "title": "Research Intelligence Dashboard: Artificial intelligence",
+  "topic": "Artificial intelligence",
+  "generated_at": "2026-11-04T20:09:10.503425+00:00",
+  "executive_summary": "Synthesized research on 'Artificial intelligence' across 3 verified source(s). Primary thematic focus centers on 'Foundations & Theoretical Concepts', 'Ethics, Governance & Future Horizons', 'Systems, Architectures & Methods', with recurring terminology including intelligence, artificial, human, general, capability. Initial evidence from 'Artificial intelligence' establishes that Artificial intelligence (AI) is the capability of computational systems to perform tasks typically associated with human intelligence, such as learning.",
+  "kpi_cards": [
+    {
+      "id": "kpi-total-sources",
+      "label": "Total Sources Evaluated",
+      "value": 3,
+      "unit": "sources",
+      "description": "Total candidate sources gathered from data collection."
+    },
+    {
+      "id": "kpi-eligible-sources",
+      "label": "Eligible Verified Sources",
+      "value": 3,
+      "unit": "sources",
+      "description": "Sources passing all structural, HTTPS, and domain verification checks."
+    },
+    {
+      "id": "kpi-excluded-sources",
+      "label": "Excluded / Duplicates",
+      "value": 0,
+      "unit": "sources",
+      "description": "Sources excluded due to verification failures or duplication."
+    },
+    {
+      "id": "kpi-theme-count",
+      "label": "Identified Themes",
+      "value": 3,
+      "unit": "themes",
+      "description": "Thematic research clusters synthesized from verified evidence."
+    }
+  ],
+  "key_themes": [
+    {
+      "theme": "Foundations & Theoretical Concepts",
+      "description": "Fundamental principles, formal definitions, and theoretical underpinnings.",
+      "frequency": 3,
+      "sources": [
+        "https://en.wikipedia.org/wiki/Artificial_intelligence",
+        "https://en.wikipedia.org/wiki/A.I._Artificial_Intelligence",
+        "https://en.wikipedia.org/wiki/Artificial_general_intelligence"
+      ]
+    },
+    {
+      "theme": "Ethics, Governance & Future Horizons",
+      "description": "Societal implications, governance frameworks, and future trajectory analysis.",
+      "frequency": 2,
+      "sources": [
+        "https://en.wikipedia.org/wiki/Artificial_intelligence",
+        "https://en.wikipedia.org/wiki/Artificial_general_intelligence"
+      ]
+    },
+    {
+      "theme": "Systems, Architectures & Methods",
+      "description": "Algorithmic architectures, computational methods, and engineering systems.",
+      "frequency": 1,
+      "sources": [
+        "https://en.wikipedia.org/wiki/Artificial_intelligence"
+      ]
+    }
+  ],
+  "important_keywords": [
+    "intelligence",
+    "artificial",
+    "human",
+    "general",
+    "capability",
+    "computational",
+    "systems",
+    "perform"
+  ],
+  "observations": [
+    {
+      "statement": "According to 'Artificial intelligence': Artificial intelligence (AI) is the capability of computational systems to perform tasks typically associated with human intelligence, such as learning.",
+      "source_title": "Artificial intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+      "confidence": "high"
+    },
+    {
+      "statement": "According to 'A.I. Artificial Intelligence': A.I. Artificial Intelligence (or simply A.I.) is a 2001 American science fiction drama film written and directed by Steven Spielberg. The screenplay by.",
+      "source_title": "A.I. Artificial Intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/A.I._Artificial_Intelligence",
+      "confidence": "high"
+    },
+    {
+      "statement": "According to 'Artificial general intelligence': Artificial general intelligence (AGI) is a hypothetical type of artificial intelligence that matches or surpasses human capabilities across virtually.",
+      "source_title": "Artificial general intelligence",
+      "source_url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
+      "confidence": "high"
+    }
+  ],
+  "information_gaps": [
+    "Evidence is derived from encyclopedia summary snippets rather than full primary papers.",
+    "Real-time chronological updates and empirical performance metrics are unrepresented in snippets."
+  ],
+  "recommendations": [
+    "Deepen primary literature review specifically targeting 'Foundations & Theoretical Concepts'.",
+    "Expand query retrieval using specific extracted keywords: intelligence, artificial, human, general.",
+    "Conduct multi-source fact cross-referencing against peer-reviewed journals."
+  ],
+  "limitations": [
+    "Analysis relies on deterministic lexical extraction, keyword frequency weighting, and rule-based clustering without generative LLM extrapolation.",
+    "Findings are constrained strictly to text snippets verified by the Research Verification Agent.",
+    "Structural validity confirms protocol and domain compliance, not infallible factual truth."
+  ],
+  "charts": [
+    {
+      "id": "chart-source-eligibility",
+      "title": "Source Evidence Eligibility Breakdown",
+      "chart_type": "pie",
+      "description": "Proportion of candidate sources eligible for evidence synthesis versus excluded records.",
+      "x_axis_label": null,
+      "y_axis_label": null,
+      "data": [
+        {
+          "label": "Eligible Sources",
+          "value": 3.0,
+          "color": "#10B981"
+        },
+        {
+          "label": "Excluded / Duplicates",
+          "value": 0.0,
+          "color": "#EF4444"
+        }
+      ],
+      "is_heuristic": false
+    },
+    {
+      "id": "chart-theme-distribution",
+      "title": "Research Theme Distribution",
+      "chart_type": "horizontal_bar",
+      "description": "Number of verified sources addressing each identified theme cluster.",
+      "x_axis_label": "Source Count",
+      "y_axis_label": "Research Theme",
+      "data": [
+        {
+          "label": "Foundations & Theoretical Concepts",
+          "value": 3.0,
+          "color": "#3B82F6"
+        },
+        {
+          "label": "Ethics, Governance & Future Horizons",
+          "value": 2.0,
+          "color": "#3B82F6"
+        },
+        {
+          "label": "Systems, Architectures & Methods",
+          "value": 1.0,
+          "color": "#3B82F6"
+        }
+      ],
+      "is_heuristic": false
+    },
+    {
+      "id": "chart-keyword-frequency",
+      "title": "Prominent Keyword Occurrences in Source Evidence",
+      "chart_type": "bar",
+      "description": "Lexical frequency count of prominent keywords extracted across verified snippet text (heuristic text measure, not real-world demographic statistic).",
+      "x_axis_label": "Extracted Keyword",
+      "y_axis_label": "Snippet Term Frequency",
+      "data": [
+        {
+          "label": "intelligence",
+          "value": 8.0,
+          "color": "#6366F1"
+        },
+        {
+          "label": "artificial",
+          "value": 7.0,
+          "color": "#6366F1"
+        },
+        {
+          "label": "human",
+          "value": 2.0,
+          "color": "#6366F1"
+        },
+        {
+          "label": "general",
+          "value": 2.0,
+          "color": "#6366F1"
+        },
+        {
+          "label": "capability",
+          "value": 1.0,
+          "color": "#6366F1"
+        },
+        {
+          "label": "computational",
+          "value": 1.0,
+          "color": "#6366F1"
+        }
+      ],
+      "is_heuristic": true
+    }
+  ],
+  "render_notice": "Safe specification format for React frontend rendering. No executable code or unsafe scripts."
+}
