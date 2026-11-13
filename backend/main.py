@@ -30,6 +30,7 @@ from backend.agents.data_agent import (
     AGENT_NAME as DATA_AGENT_NAME,
     AGENT_STATUS as DATA_AGENT_STATUS,
     AGENT_VERSION as DATA_AGENT_VERSION,
+    DataCollectorRateLimitError,
     DataCollectorResponseError,
     DataCollectorTimeoutError,
     DataCollectorUpstreamError,
@@ -43,6 +44,13 @@ from backend.agents.verification_agent import (
     verify_research,
 )
 from backend.config import settings
+from backend.integrations import (
+    DelegationTaskRequest,
+    DelegationTaskResult,
+    IntegrationsStatusResponse,
+    PlatformIntegrationInfo,
+    integration_registry,
+)
 from backend.models.analyst import (
     AnalysisRequest,
     AnalysisResponse,
@@ -76,9 +84,15 @@ app = FastAPI(
 )
 
 # Enable CORS for frontend applications (default port 5173 / localhost)
+cors_origins_raw = getattr(settings, "CORS_ALLOWED_ORIGINS", "*") or "*"
+cors_origins = (
+    ["*"]
+    if cors_origins_raw.strip() == "*"
+    else [origin.strip().rstrip("/") for origin in cors_origins_raw.split(",") if origin.strip()]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -172,13 +186,23 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
         Structured research data including titles, snippets, source URLs, and timestamps.
     """
     try:
-        data = await collect_research(query=payload.query, limit=payload.limit)
+        data = await collect_research(
+            query=payload.query,
+            limit=payload.limit,
+            sources=payload.sources,
+        )
         return ResearchResponse(**data)
     except DataCollectorTimeoutError as exc:
         logger.warning("Research collection timed out for query '%s': %s", payload.query, exc)
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Upstream research provider timed out. Please try again."
+        ) from exc
+    except DataCollectorRateLimitError as exc:
+        logger.warning("Upstream rate limit hit for query '%s': %s", payload.query, exc)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc)
         ) from exc
     except (DataCollectorUpstreamError, DataCollectorResponseError) as exc:
         logger.error("Upstream research provider failure for query '%s': %s", payload.query, exc)
@@ -367,4 +391,53 @@ def get_pipeline_by_id(pipeline_id: str) -> PipelineResponse:
             detail=f"Pipeline run '{pipeline_id}' not found in history.",
         )
     return run
+
+
+@app.get(
+    "/integrations/status",
+    response_model=IntegrationsStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Sponsor Platform Integrations Status",
+    description="Returns honest readiness, credential presence booleans (never secret values), and delegation telemetry across BAND, Lyzr, Agent37, AdaL, and Finch.",
+)
+def get_integrations_status() -> IntegrationsStatusResponse:
+    """Inspect genuine runtime configuration and integration capabilities across sponsor platforms."""
+    return integration_registry.get_status_response()
+
+
+@app.post(
+    "/integrations/check/{platform_id}",
+    response_model=PlatformIntegrationInfo,
+    status_code=status.HTTP_200_OK,
+    summary="Probe Sponsor Platform Connectivity",
+    description="Runs a non-mutating credential/runtime verification check for the requested sponsor platform.",
+)
+async def check_integration_platform(platform_id: str) -> PlatformIntegrationInfo:
+    """Run an explicit diagnostic probe against a registered sponsor adapter."""
+    info = await integration_registry.check_platform(platform_id)
+    if info is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown integration platform '{platform_id}'.",
+        )
+    return info
+
+
+@app.post(
+    "/integrations/delegate",
+    response_model=DelegationTaskResult,
+    status_code=status.HTTP_200_OK,
+    summary="Delegate Structured Task to Sponsor Adapter",
+    description="Executes validated, timeout-bounded task delegation through a modular sponsor adapter and records telemetry.",
+)
+async def delegate_integration_task(payload: DelegationTaskRequest) -> DelegationTaskResult:
+    """Validate and dispatch a structured task delegation request to a target sponsor adapter."""
+    result = await integration_registry.delegate(payload)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown integration target platform '{payload.target_platform}'.",
+        )
+    return result
+
 

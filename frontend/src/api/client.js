@@ -46,7 +46,7 @@ apiClient.interceptors.response.use(
       errorMessage = 'Request timed out waiting for multi-agent pipeline response. Please try again.';
       statusCode = 504;
     } else if (error.request) {
-      errorMessage = `Cannot connect to backend server at ${API_BASE_URL}. Ensure FastAPI is running on port 8010.`;
+      errorMessage = `Cannot connect to backend server at ${API_BASE_URL}. Ensure FastAPI is running on port 8010 (or verify your remote Render backend is awake and reachable).`;
       statusCode = 0;
     }
 

@@ -349,3 +349,53 @@ async def test_phase_3_4_empty_themes_honest_handling(sample_valid_analyst_outpu
     chart_ids = [c["id"] for c in spec["charts"]]
     assert "chart-theme-distribution" not in chart_ids
 
+
+@pytest.mark.asyncio
+async def test_phase_4_multi_source_chart_and_observation_metadata(sample_valid_analyst_output):
+    """
+    Phase 4 test:
+    Verify Dashboard Builder outputs source_distribution, non-heuristic
+    chart-source-distribution, metadata.sources_represented, and forwards
+    publication metadata on observations.
+    """
+    sample_valid_analyst_output["source_distribution"] = {
+        "wikipedia": 1,
+        "arxiv": 2,
+        "crossref": 1,
+    }
+    sample_valid_analyst_output["evidence_backed_observations"] = [
+        {
+            "statement": "According to 'Quantum Surface Codes': Surface codes protect logical qubits.",
+            "source_title": "Quantum Surface Codes",
+            "source_url": "https://arxiv.org/abs/2401.12345v1",
+            "source_name": "arxiv",
+            "source_type": "arxiv_paper",
+            "publication_date": "2024-01-22",
+            "doi": "10.1103/PhysRevLett.132.010501",
+            "authors": ["Alice Smith", "Bob Chen"],
+            "confidence": "high",
+            "confidence_reason": "Direct topical relevance.",
+            "is_weakly_relevant": False,
+        }
+    ]
+
+    spec = await build_dashboard(sample_valid_analyst_output)
+
+    assert spec["source_distribution"] == {"wikipedia": 1, "arxiv": 2, "crossref": 1}
+    assert set(spec["metadata"]["sources_represented"]) == {"wikipedia", "arxiv", "crossref"}
+
+    charts = {c["id"]: c for c in spec["charts"]}
+    assert "chart-source-distribution" in charts
+    source_chart = charts["chart-source-distribution"]
+    assert source_chart["chart_type"] == "bar"
+    assert source_chart["is_heuristic"] is False
+    chart_map = {d["label"]: d["value"] for d in source_chart["data"]}
+    assert chart_map == {"Wikipedia": 1.0, "arXiv": 2.0, "Crossref": 1.0}
+
+    obs = spec["observations"][0]
+    assert obs["source_name"] == "arxiv"
+    assert obs["source_type"] == "arxiv_paper"
+    assert obs["publication_date"] == "2024-01-22"
+    assert obs["doi"] == "10.1103/PhysRevLett.132.010501"
+    assert obs["authors"] == ["Alice Smith", "Bob Chen"]
+

@@ -5,6 +5,8 @@ import {
   checkBackendHealth,
   getPipelineHistory,
   getPipelineRunById,
+  getIntegrationsStatus,
+  checkIntegrationPlatform,
 } from '../api/research';
 import {
   applyNewRunToState,
@@ -51,6 +53,7 @@ export function ResearchProvider({ children }) {
   // Fleet agent statuses from GET /agents/status
   const [agentsFleet, setAgentsFleet] = useState(null);
   const [fleetLoading, setFleetLoading] = useState(true);
+  const [integrationsStatus, setIntegrationsStatus] = useState(null);
 
   // Connection & execution states
   const [backendHealth, setBackendHealth] = useState({ healthy: false, checking: true });
@@ -105,9 +108,10 @@ export function ResearchProvider({ children }) {
       setBackendHealth({ healthy, checking: false });
 
       if (healthy) {
-        const [statusData, historyData] = await Promise.allSettled([
+        const [statusData, historyData, integrationsData] = await Promise.allSettled([
           getAgentsStatus(),
           getPipelineHistory(20),
+          getIntegrationsStatus(),
         ]);
 
         if (statusData.status === 'fulfilled' && statusData.value?.agents) {
@@ -116,6 +120,10 @@ export function ResearchProvider({ children }) {
 
         if (historyData.status === 'fulfilled' && historyData.value) {
           setPipelineState((prev) => applyBackendHistorySync(prev, historyData.value));
+        }
+
+        if (integrationsData.status === 'fulfilled' && integrationsData.value?.platforms) {
+          setIntegrationsStatus(integrationsData.value);
         }
       }
     } catch (err) {
@@ -137,12 +145,13 @@ export function ResearchProvider({ children }) {
   }, [checkStatus]);
 
   // Execute research via POST /pipeline
-  const startResearch = async (query, limit = 5) => {
+  const startResearch = async (query, limit = 5, sources = ['wikipedia']) => {
     setIsExecuting(true);
     setExecutionError(null);
+    const activeSources = Array.isArray(sources) && sources.length > 0 ? sources : ['wikipedia'];
 
     try {
-      const response = await runPipeline({ query, limit });
+      const response = await runPipeline({ query, limit, sources: activeSources });
       setPipelineState((prev) => applyNewRunToState(prev, response));
 
       if (response.status === 'failed') {
@@ -171,6 +180,8 @@ export function ResearchProvider({ children }) {
           eligible_count: 0,
           quality_score: 0,
           theme_count: 0,
+          sources_requested: activeSources,
+          source_breakdown: {},
           summary: err?.message || 'Pipeline request failed.',
         };
         setPipelineState((prev) => ({
@@ -251,6 +262,26 @@ export function ResearchProvider({ children }) {
       selectedRunId !== latestSuccessfulRun.pipeline_id
   );
 
+  const probeIntegration = useCallback(async (platformId) => {
+    if (!platformId) return null;
+    try {
+      const updated = await checkIntegrationPlatform(platformId);
+      setIntegrationsStatus((prev) => {
+        if (!prev?.platforms) return prev;
+        return {
+          ...prev,
+          platforms: {
+            ...prev.platforms,
+            [platformId]: updated,
+          },
+        };
+      });
+      return updated;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const value = {
     currentPipeline,
     latestSuccessfulRun,
@@ -260,6 +291,7 @@ export function ResearchProvider({ children }) {
     runDetailsById,
     agentsFleet,
     fleetLoading,
+    integrationsStatus,
     backendHealth,
     isExecuting,
     isSelectingRun,
@@ -270,6 +302,7 @@ export function ResearchProvider({ children }) {
     clearCurrentResearch,
     clearHistory,
     refreshStatus: checkStatus,
+    probeIntegration,
   };
 
   return <ResearchContext.Provider value={value}>{children}</ResearchContext.Provider>;

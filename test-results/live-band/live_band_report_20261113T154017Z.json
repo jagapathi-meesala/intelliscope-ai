@@ -1,0 +1,105 @@
+{
+  "phase": "5",
+  "title": "BAND Live End-to-End Room Verification",
+  "verified_at": "2026-11-13T15:40:17.319410+00:00",
+  "credential_source": "agent_config.yaml",
+  "rest_url": "https://app.band.ai",
+  "ws_url": "wss://app.band.ai/api/v1/socket/websocket",
+  "user_sender_key_present": false,
+  "rest_auth_passed": true,
+  "agent_profile": {
+    "id": "f00ed576-fbfe-4dfb-95a7-82f6db3c6825",
+    "name": "IntelliScope Collector",
+    "handle": "baboiiibabu/intelliscope-collector",
+    "id_matches_config": true
+  },
+  "selected_chat_id": "c348c418-f3a6-467d-8601-c7453bec68e1",
+  "chats_found": 1,
+  "context_messages_before": [
+    {
+      "id": "e3773bad-d280-497c-93eb-cdb3ddb82dbc",
+      "sender_type": "User",
+      "sender_id": "bbc4c1de-da96-4af6-8ec7-1ce5b88a2be7",
+      "sender_name": "jagapathi naidu",
+      "message_type": "text",
+      "inserted_at": "2026-11-09T19:24:56.273835+00:00",
+      "content_preview": "@[[f00ed576-fbfe-4dfb-95a7-82f6db3c6825]] Collector Research machine learning"
+    },
+    {
+      "id": "44ff5ef0-d3fc-4f5c-9c9d-312928188543",
+      "sender_type": "Agent",
+      "sender_id": "f00ed576-fbfe-4dfb-95a7-82f6db3c6825",
+      "sender_name": "IntelliScope Collector",
+      "message_type": "text",
+      "inserted_at": "2026-11-09T19:24:58.948623+00:00",
+      "content_preview": "@[[bbc4c1de-da96-4af6-8ec7-1ce5b88a2be7]] 🚀 **IntelliScope Multi-Agent Intelligence Pipeline**\n**Topic:** *mac..."
+    },
+    {
+      "id": "424d17bf-7701-42bc-9147-787896cea2c0",
+      "sender_type": "User",
+      "sender_id": "bbc4c1de-da96-4af6-8ec7-1ce5b88a2be7",
+      "sender_name": "jagapathi naidu",
+      "message_type": "text",
+      "inserted_at": "2026-11-09T19:25:06.594962+00:00",
+      "content_preview": "@[[f00ed576-fbfe-4dfb-95a7-82f6db3c6825]] Collector Research neural networks"
+    },
+    {
+      "id": "02b8e395-82ee-494a-823e-ad5d8119563c",
+      "sender_type": "Agent",
+      "sender_id": "f00ed576-fbfe-4dfb-95a7-82f6db3c6825",
+      "sender_name": "IntelliScope Collector",
+      "message_type": "text",
+      "inserted_at": "2026-11-09T19:25:09.415210+00:00",
+      "content_preview": "@[[bbc4c1de-da96-4af6-8ec7-1ce5b88a2be7]] 🚀 **IntelliScope Multi-Agent Intelligence Pipeline**\n**Topic:** *neu..."
+    },
+    {
+      "id": "abda4f26-0466-4bcb-b644-31bbe3147154",
+      "sender_type": "User",
+      "sender_id": "bbc4c1de-da96-4af6-8ec7-1ce5b88a2be7",
+      "sender_name": "jagapathi naidu",
+      "message_type": "text",
+      "inserted_at": "2026-11-11T17:58:28.345000+00:00",
+      "content_preview": "@[[f00ed576-fbfe-4dfb-95a7-82f6db3c6825]] Collector Research neural networks"
+    },
+    {
+      "id": "15c6c173-a7db-41f1-ad06-dfadffc3d862",
+      "sender_type": "Agent",
+      "sender_id": "f00ed576-fbfe-4dfb-95a7-82f6db3c6825",
+      "sender_name": "IntelliScope Collector",
+      "message_type": "text",
+      "inserted_at": "2026-11-11T17:58:33.018712+00:00",
+      "content_preview": "@[[bbc4c1de-da96-4af6-8ec7-1ce5b88a2be7]] 🚀 **IntelliScope Multi-Agent Intelligence Pipeline**\n**Topic:** *neu..."
+    },
+    {
+      "id": "2ac9ccbf-1db5-4381-add9-6d359bb8ff16",
+      "sender_type": "User",
+      "sender_id": "bbc4c1de-da96-4af6-8ec7-1ce5b88a2be7",
+      "sender_name": "jagapathi naidu",
+      "message_type": "text",
+      "inserted_at": "2026-11-13T15:34:58.974093+00:00",
+      "content_preview": "@[[f00ed576-fbfe-4dfb-95a7-82f6db3c6825]] Collector Research neural networks"
+    },
+    {
+      "id": "e563f1fc-a2a2-4b10-99d9-533548ff5dc4",
+      "sender_type": "Agent",
+      "sender_id": "f00ed576-fbfe-4dfb-95a7-82f6db3c6825",
+      "sender_name": "IntelliScope Collector",
+      "message_type": "task",
+      "inserted_at": "2026-11-13T15:35:01.157150+00:00",
+      "content_preview": "Starting IntelliScope pipeline execution 221041b0 for 'neural networks'"
+    }
+  ],
+  "pending_messages_before": 0,
+  "historical_user_messages": 10,
+  "historical_agent_replies": 10,
+  "backend_ready": true,
+  "ws_connected": false,
+  "existing_host_agent_running": true,
+  "outbound_test_message_sent": false,
+  "outbound_test_message_id": null,
+  "inbound_agent_reply_observed": false,
+  "backend_pipeline_run_recorded": false,
+  "e2e_room_roundtrip_passed": false,
+  "errors": [],
+  "notes": "Live BAND REST authentication succeeded and Existing host agent single-instance lock active (avoided duplicate WS subscriber) (history shows 10 user messages and 10 agent replies in room c348c418-f3a6-467d-8601-c7453bec68e1). Fresh automated User->Agent E2E roundtrip requires BAND_USER_API_KEY (or an interactive message sent from app.band.ai during the listen window)."
+}

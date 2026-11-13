@@ -35,6 +35,26 @@ class EvidenceObservation(BaseModel):
         default=False,
         description="Flag indicating source was classified as weakly relevant"
     )
+    source_name: str = Field(
+        default="wikipedia",
+        description="Provider name identifier ('wikipedia', 'arxiv', or 'crossref')"
+    )
+    source_type: str = Field(
+        default="wikipedia_extract",
+        description="Provenance classification for the source record"
+    )
+    publication_date: Optional[str] = Field(
+        default=None,
+        description="Publication date or year-month when available"
+    )
+    doi: Optional[str] = Field(
+        default=None,
+        description="Digital Object Identifier (DOI) when available"
+    )
+    authors: List[str] = Field(
+        default_factory=list,
+        description="List of contributing authors when available"
+    )
 
 
 class KeyTheme(BaseModel):
@@ -145,6 +165,10 @@ class AnalysisResponse(BaseModel):
         ...,
         ge=0,
         description="Count of sources excluded due to failed checks or duplication"
+    )
+    source_distribution: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Distribution count of eligible verified sources grouped by provider"
     )
     executive_summary: str = Field(
         ...,

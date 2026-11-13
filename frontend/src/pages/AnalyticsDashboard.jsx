@@ -22,7 +22,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useResearch } from '../context/ResearchContext';
-import { getNormalizedThemes } from '../context/pipelineState';
+import { getNormalizedThemes, getSourceDistribution } from '../context/pipelineState';
 import KPICard from '../components/common/KPICard';
 import SafeExternalLink from '../components/common/SafeExternalLink';
 import EmptyState from '../components/common/EmptyState';
@@ -61,6 +61,7 @@ export default function AnalyticsDashboard() {
   const charts = dashboard.charts || [];
   const observations = dashboard.observations || [];
   const themes = getNormalizedThemes(dashboard);
+  const sourceDistEntries = Object.entries(getSourceDistribution(dashboard));
 
   return (
     <div className="space-y-8">
@@ -80,12 +81,22 @@ export default function AnalyticsDashboard() {
           </h2>
         </div>
 
-        {dashboard.generated_at && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
-            <Calendar className="w-3.5 h-3.5 text-slate-500" />
-            <span>Generated: {new Date(dashboard.generated_at).toLocaleTimeString()}</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {sourceDistEntries.map(([provider, count]) => (
+            <span
+              key={provider}
+              className="text-xs font-mono px-2.5 py-1 rounded-lg bg-brand-950/60 border border-brand-800/40 text-brand-200 capitalize"
+            >
+              {provider}: <strong className="text-white font-bold">{count}</strong>
+            </span>
+          ))}
+          {dashboard.generated_at && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <span>Generated: {new Date(dashboard.generated_at).toLocaleTimeString()}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards Grid */}
@@ -210,10 +221,22 @@ export default function AnalyticsDashboard() {
                 className="p-5 rounded-2xl border border-slate-800 bg-navy-900/80 space-y-2.5 flex flex-col justify-between"
               >
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-navy-950 text-slate-300 border border-slate-800">
-                      {obs.confidence || 'high'} confidence
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-navy-950 text-slate-300 border border-slate-800">
+                        {obs.confidence || 'high'} confidence
+                      </span>
+                      {obs.source_name && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-950/60 text-brand-300 border border-brand-800/40">
+                          {obs.source_name}
+                        </span>
+                      )}
+                      {obs.source_type && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-navy-950 text-slate-400 border border-slate-800">
+                          {obs.source_type}
+                        </span>
+                      )}
+                    </div>
                     {obs.is_weakly_relevant && (
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/60">
                         Weakly Relevant
@@ -221,17 +244,40 @@ export default function AnalyticsDashboard() {
                     )}
                   </div>
                   <p className="text-xs text-slate-200 leading-relaxed font-medium">
-                    {obs.statement}
+                    {obs.statement || 'No statement recorded.'}
                   </p>
                   {obs.confidence_reason && (
                     <p className="text-[11px] text-slate-400 italic">
                       Rationale: {obs.confidence_reason}
                     </p>
                   )}
+                  {(Array.isArray(obs.authors) && obs.authors.length > 0 || obs.publication_date || obs.doi) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 pt-1">
+                      {Array.isArray(obs.authors) && obs.authors.length > 0 && (
+                        <span>
+                          Authors: <span className="text-slate-300">{obs.authors.slice(0, 3).join(', ')}{obs.authors.length > 3 ? ` +${obs.authors.length - 3}` : ''}</span>
+                        </span>
+                      )}
+                      {obs.publication_date && (
+                        <span className="font-mono">
+                          Published: <span className="text-slate-300">{obs.publication_date}</span>
+                        </span>
+                      )}
+                      {obs.doi && (
+                        <span className="font-mono">
+                          DOI: <span className="text-cyan-300">{obs.doi}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
-                  <span className="text-slate-400 truncate max-w-xs">{obs.source_title}</span>
-                  <SafeExternalLink href={obs.source_url} maxLength={30} />
+                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-2 text-xs">
+                  <span className="text-slate-400 truncate max-w-xs">{obs.source_title || 'Untitled source'}</span>
+                  {obs.source_url ? (
+                    <SafeExternalLink href={obs.source_url} maxLength={30} />
+                  ) : (
+                    <span className="text-slate-500 font-mono text-[11px]">No URL</span>
+                  )}
                 </div>
               </div>
             ))}

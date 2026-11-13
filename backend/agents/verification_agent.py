@@ -13,6 +13,7 @@ Note:
 
 from datetime import datetime, timezone
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
@@ -29,16 +30,21 @@ AGENT_CAPABILITIES = [
     "structural_schema_validation",
     "https_protocol_verification",
     "domain_whitelist_enforcement",
+    "source_specific_domain_whitelist",
+    "doi_format_validation",
     "deduplication_analysis",
     "iso_timestamp_validation",
     "quality_score_calculation",
 ]
 
 FACTUAL_ACCURACY_DISCLAIMER = (
-    "This verification evaluates structural integrity, URL protocol compliance, "
-    "domain whitelist adherence, timestamp validity, and deduplication. "
+    "This verification evaluates structural integrity, HTTPS protocol compliance, "
+    "source-specific domain whitelist adherence, DOI syntax validity when present, "
+    "timestamp validity, and deduplication. "
     "It does NOT assert that the factual claims within snippets are verified facts."
 )
+
+DOI_PATTERN = re.compile(r"^10\.\d{4,9}/[^\s]+$")
 
 
 def _validate_title(raw_title: Any) -> Tuple[bool, Optional[str]]:
@@ -115,9 +121,10 @@ def _validate_url(raw_url: Any, allowed_domains: List[str]) -> Tuple[bool, bool,
 
     domain_error = None
     if not domain_allowed:
+        allowed_desc = ", ".join(allowed_domains) if allowed_domains else "none configured"
         domain_error = (
             f"Source domain '{host}' is not in allowed domains list "
-            f"(allowed: {', '.join(allowed_domains)})"
+            f"(allowed: {allowed_desc})"
         )
 
     # Combine errors if any
@@ -149,6 +156,53 @@ def _validate_timestamp(raw_timestamp: Any) -> Tuple[bool, Optional[str]]:
         return False, f"Invalid ISO 8601 timestamp format: '{ts_str}'"
 
 
+def _resolve_item_source_name(item: Dict[str, Any]) -> str:
+    """Resolve normalized provider name from item metadata or provenance."""
+    raw_source = item.get("source_name")
+    if isinstance(raw_source, str) and raw_source.strip():
+        return raw_source.strip().lower()
+    src_type = str(item.get("source_type") or "").strip().lower()
+    if src_type.startswith("arxiv"):
+        return "arxiv"
+    if src_type.startswith("crossref"):
+        return "crossref"
+    return "wikipedia"
+
+
+def _resolve_allowed_domains(
+    source_name: str,
+    explicit_allowed_domains: Optional[List[str]] = None,
+) -> List[str]:
+    """Resolve allowed host domains for a given source provider."""
+    if explicit_allowed_domains:
+        return explicit_allowed_domains
+    source_map = getattr(settings, "SOURCE_ALLOWED_DOMAINS", None) or {}
+    if source_name in source_map:
+        return list(source_map[source_name])
+    if source_name == "wikipedia":
+        return list(settings.ALLOWED_SOURCE_DOMAINS)
+    return []
+
+
+def _validate_doi(raw_doi: Any) -> Tuple[Optional[bool], Optional[str], Optional[str]]:
+    """
+    Validate DOI syntax when a DOI field is provided.
+
+    Returns:
+        (doi_valid, error_msg, canonical_doi) where doi_valid is None if DOI omitted.
+    """
+    if raw_doi is None:
+        return None, None, None
+    if not isinstance(raw_doi, str):
+        return False, f"Field 'doi' must be a string, got {type(raw_doi).__name__}", None
+    doi_str = raw_doi.strip()
+    if not doi_str:
+        return False, "Field 'doi' cannot be empty when provided", None
+    if not DOI_PATTERN.match(doi_str):
+        return False, f"Invalid DOI format: '{doi_str}' (expected '10.<registrant>/<suffix>')", None
+    return True, None, doi_str.lower()
+
+
 def _calculate_item_score(
     title_valid: bool,
     snippet_valid: bool,
@@ -158,17 +212,19 @@ def _calculate_item_score(
     timestamp_valid: bool,
     is_duplicate_url: bool,
     is_duplicate_title: bool,
+    doi_valid: Optional[bool] = None,
+    is_duplicate_doi: bool = False,
 ) -> float:
     """
-    Calculate transparent quality score (0 to 100) for a single item.
+    Calculate transparent structural quality score (0 to 100) for a single item.
 
     Rubric:
     - Title: 20 pts (valid), 10 pts (if duplicate title), 0 pts (missing/invalid)
     - Snippet: 20 pts (valid >=15 chars), 10 pts (short), 0 pts (missing/invalid)
     - Source URL & HTTPS: 25 pts (valid HTTPS), 5 pts (HTTP), 0 pts (missing/malformed)
-    - Domain compliance: 20 pts (allowed Wikipedia source), 0 pts (disallowed)
+    - Domain compliance: 20 pts (source-specific allowed domain), 0 pts (disallowed)
     - Timestamp: 15 pts (valid ISO 8601), 0 pts (missing/invalid)
-    - Deduplication penalty: -15 pts if duplicate URL in batch.
+    - Deduplication & DOI penalties: -15 pts duplicate URL, -10 pts duplicate DOI, -20 pts invalid DOI.
     """
     score = 0.0
 
@@ -194,9 +250,13 @@ def _calculate_item_score(
     if timestamp_valid:
         score += 15.0
 
-    # Penalty for duplicate URL
+    # Penalties for duplicate URL, duplicate DOI, or invalid DOI when supplied
     if is_duplicate_url:
         score -= 15.0
+    if is_duplicate_doi:
+        score -= 10.0
+    if doi_valid is False:
+        score -= 20.0
 
     return max(0.0, min(100.0, round(score, 2)))
 
@@ -226,7 +286,7 @@ async def verify_research(
     else:
         payload = {}
 
-    domains_to_check = allowed_domains or settings.ALLOWED_SOURCE_DOMAINS
+    explicit_domains = allowed_domains if allowed_domains else None
     query = str(payload.get("query", "") or "")
     raw_results = payload.get("results")
 
@@ -264,6 +324,7 @@ async def verify_research(
                 "error_count": 1,
                 "duplicate_urls_count": 0,
                 "duplicate_titles_count": 0,
+                "duplicate_dois_count": 0,
                 "structurally_valid_count": 0,
                 "directly_relevant_count": 0,
                 "weakly_relevant_count": 0,
@@ -274,6 +335,7 @@ async def verify_research(
 
     seen_urls: Dict[str, int] = {}
     seen_titles: Dict[str, int] = {}
+    seen_dois: Dict[str, int] = {}
     reports: List[Dict[str, Any]] = []
 
     total_checks_count = 0
@@ -283,6 +345,7 @@ async def verify_research(
     total_errors_count = 0
     duplicate_urls_count = 0
     duplicate_titles_count = 0
+    duplicate_dois_count = 0
     valid_results_count = 0
     invalid_results_count = 0
 
@@ -299,7 +362,9 @@ async def verify_research(
             reports.append({
                 "index": idx,
                 "title": None,
+                "source_name": "wikipedia",
                 "source_url": None,
+                "doi": None,
                 "status": "invalid",
                 "item_score": 0.0,
                 "is_weakly_relevant": False,
@@ -312,16 +377,22 @@ async def verify_research(
                     "timestamp_valid": False,
                     "is_duplicate_url": False,
                     "is_duplicate_title": False,
+                    "doi_valid": None,
+                    "is_duplicate_doi": False,
                 },
                 "errors": item_errors,
                 "warnings": item_warnings,
             })
             continue
 
+        source_name = _resolve_item_source_name(item)
+        item_allowed_domains = _resolve_allowed_domains(source_name, explicit_domains)
+
         raw_title = item.get("title")
         raw_snippet = item.get("snippet")
         raw_url = item.get("source_url") or item.get("source")
         raw_ts = item.get("retrieved_at")
+        raw_doi = item.get("doi")
 
         # 1. Title check
         title_ok, title_err = _validate_title(raw_title)
@@ -344,8 +415,8 @@ async def verify_research(
             item_warnings.append(snippet_warn)
             total_warnings_count += 1
 
-        # 3. URL, HTTPS protocol, and domain check
-        https_ok, domain_ok, url_err, canonical_url = _validate_url(raw_url, domains_to_check)
+        # 3. URL, HTTPS protocol, and source-specific domain whitelist check
+        https_ok, domain_ok, url_err, canonical_url = _validate_url(raw_url, item_allowed_domains)
         total_checks_count += 2
         if https_ok:
             passed_checks_count += 1
@@ -369,12 +440,36 @@ async def verify_research(
             failed_checks_count += 1
             item_errors.append(ts_err)
 
-        # 5. Duplicate checks
+        # 5. DOI validation (when available) & DOI deduplication
+        doi_ok, doi_err, canonical_doi = _validate_doi(raw_doi)
+        is_dup_doi = False
+        if raw_doi is not None:
+            total_checks_count += 1
+            if doi_ok and canonical_doi:
+                passed_checks_count += 1
+                if canonical_doi in seen_dois:
+                    is_dup_doi = True
+                    duplicate_dois_count += 1
+                    first_doi_idx = seen_dois[canonical_doi]
+                    item_warnings.append(
+                        f"Duplicate DOI '{raw_doi}': already seen at result index {first_doi_idx}"
+                    )
+                    total_warnings_count += 1
+                else:
+                    seen_dois[canonical_doi] = idx
+            else:
+                failed_checks_count += 1
+                if doi_err:
+                    item_errors.append(doi_err)
+        elif source_name == "crossref":
+            item_warnings.append("Crossref work record does not include a DOI identifier")
+            total_warnings_count += 1
+
+        # 6. URL & title duplicate checks
         is_dup_url = False
         is_dup_title = False
         total_checks_count += 2
 
-        # Check URL duplication
         if canonical_url:
             if canonical_url in seen_urls:
                 is_dup_url = True
@@ -391,7 +486,6 @@ async def verify_research(
         else:
             failed_checks_count += 1
 
-        # Check title duplication
         if title_ok and isinstance(raw_title, str):
             norm_title = raw_title.strip().lower()
             if norm_title in seen_titles:
@@ -409,7 +503,7 @@ async def verify_research(
         else:
             failed_checks_count += 1
 
-        # 6. Check transparent relevance status
+        # 7. Check transparent relevance status
         is_weak = bool(item.get("is_weakly_relevant", False) or item.get("relevance") == "weakly_relevant")
         relevance_reason = item.get("relevance_reason")
         if is_weak:
@@ -418,7 +512,7 @@ async def verify_research(
             )
             total_warnings_count += 1
 
-        # Compute item quality score
+        # Compute item structural quality score
         item_score = _calculate_item_score(
             title_valid=title_ok,
             snippet_valid=snippet_ok,
@@ -428,6 +522,8 @@ async def verify_research(
             timestamp_valid=ts_ok,
             is_duplicate_url=is_dup_url,
             is_duplicate_title=is_dup_title,
+            doi_valid=doi_ok,
+            is_duplicate_doi=is_dup_doi,
         )
 
         total_errors_count += len(item_errors)
@@ -445,7 +541,9 @@ async def verify_research(
         reports.append({
             "index": idx,
             "title": raw_title if isinstance(raw_title, str) else None,
+            "source_name": source_name,
             "source_url": raw_url if isinstance(raw_url, str) else None,
+            "doi": raw_doi.strip() if isinstance(raw_doi, str) and raw_doi.strip() else None,
             "status": item_status,
             "item_score": item_score,
             "is_weakly_relevant": is_weak,
@@ -458,6 +556,8 @@ async def verify_research(
                 "timestamp_valid": ts_ok,
                 "is_duplicate_url": is_dup_url,
                 "is_duplicate_title": is_dup_title,
+                "doi_valid": doi_ok,
+                "is_duplicate_doi": is_dup_doi,
             },
             "errors": item_errors,
             "warnings": item_warnings,
@@ -506,6 +606,7 @@ async def verify_research(
             "error_count": total_errors_count,
             "duplicate_urls_count": duplicate_urls_count,
             "duplicate_titles_count": duplicate_titles_count,
+            "duplicate_dois_count": duplicate_dois_count,
             "structurally_valid_count": structurally_valid_count,
             "directly_relevant_count": directly_relevant_count,
             "weakly_relevant_count": weakly_relevant_count,

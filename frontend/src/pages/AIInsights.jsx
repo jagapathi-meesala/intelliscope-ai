@@ -12,7 +12,7 @@ import {
   Info,
 } from 'lucide-react';
 import { useResearch } from '../context/ResearchContext';
-import { getNormalizedThemes } from '../context/pipelineState';
+import { getNormalizedThemes, getSourceDistribution } from '../context/pipelineState';
 import SafeExternalLink from '../components/common/SafeExternalLink';
 import EmptyState from '../components/common/EmptyState';
 
@@ -48,6 +48,7 @@ export default function AIInsights() {
   const gaps = analysis.information_gaps || [];
   const recommendations = analysis.recommendations || [];
   const limitations = analysis.limitations || [];
+  const sourceDistEntries = Object.entries(getSourceDistribution(analysis));
 
   return (
     <div className="space-y-8">
@@ -67,7 +68,15 @@ export default function AIInsights() {
           </h2>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+          {sourceDistEntries.map(([provider, count]) => (
+            <span
+              key={provider}
+              className="px-2.5 py-1 rounded-lg bg-brand-950/60 border border-brand-800/40 text-brand-200 capitalize"
+            >
+              {provider}: <strong className="text-white font-bold">{count}</strong>
+            </span>
+          ))}
           <span className="px-2.5 py-1 rounded-lg bg-navy-900 border border-slate-800 text-slate-300">
             <strong className="text-emerald-400 font-bold">{analysis.eligible_sources_count}</strong> Eligible Sources
           </span>
@@ -216,20 +225,54 @@ export default function AIInsights() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-xs">
-                    <div className="flex items-center gap-1.5 text-slate-400">
+                    <div className="flex flex-wrap items-center gap-1.5 text-slate-400">
+                      {obs.source_name && (
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-brand-950/60 text-brand-300 border border-brand-800/40">
+                          {obs.source_name}
+                        </span>
+                      )}
+                      {obs.source_type && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-navy-950 text-slate-400 border border-slate-800">
+                          {obs.source_type}
+                        </span>
+                      )}
                       <span className="text-slate-500">Source:</span>
-                      <span className="font-medium text-white truncate max-w-xs">{obs.source_title}</span>
-                      <span>•</span>
-                      <SafeExternalLink href={obs.source_url} maxLength={40} />
+                      <span className="font-medium text-white truncate max-w-xs">{obs.source_title || 'Untitled source'}</span>
+                      {obs.source_url && (
+                        <>
+                          <span>•</span>
+                          <SafeExternalLink href={obs.source_url} maxLength={40} />
+                        </>
+                      )}
                     </div>
 
                     {obs.confidence_reason && (
                       <div className="flex items-center gap-1 text-slate-400 text-[11px] italic">
-                        <Info className="w-3 h-3 text-slate-500" />
+                        <Info className="w-3 h-3 text-slate-500 shrink-0" />
                         <span className="truncate max-w-sm">{obs.confidence_reason}</span>
                       </div>
                     )}
                   </div>
+
+                  {(Array.isArray(obs.authors) && obs.authors.length > 0 || obs.publication_date || obs.doi) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 pt-1">
+                      {Array.isArray(obs.authors) && obs.authors.length > 0 && (
+                        <span>
+                          Authors: <span className="text-slate-300">{obs.authors.slice(0, 3).join(', ')}{obs.authors.length > 3 ? ` +${obs.authors.length - 3}` : ''}</span>
+                        </span>
+                      )}
+                      {obs.publication_date && (
+                        <span className="font-mono">
+                          Published: <span className="text-slate-300">{obs.publication_date}</span>
+                        </span>
+                      )}
+                      {obs.doi && (
+                        <span className="font-mono">
+                          DOI: <span className="text-cyan-300">{obs.doi}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })

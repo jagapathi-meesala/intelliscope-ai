@@ -199,10 +199,15 @@ export default function Verification() {
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
                   <span className="text-xs font-mono px-2 py-0.5 rounded bg-navy-950 text-slate-400 border border-slate-800">
                     Item #{item.index + 1}
                   </span>
+                  {item.source_name && (
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/50">
+                      {item.source_name}
+                    </span>
+                  )}
                   <h4 className="text-base font-bold text-white truncate max-w-lg">
                     {item.title || 'Untitled Record'}
                   </h4>
@@ -216,7 +221,12 @@ export default function Verification() {
                     {item.is_weakly_relevant ? 'Weakly Relevant' : 'Directly Relevant'}
                   </span>
                 </div>
-                <SafeExternalLink href={item.source_url} maxLength={70} />
+                <div className="flex flex-wrap items-center gap-3">
+                  <SafeExternalLink href={item.source_url} maxLength={70} />
+                  {item.doi && (
+                    <span className="text-[11px] font-mono text-cyan-300">DOI: {item.doi}</span>
+                  )}
+                </div>
                 {item.relevance_reason && (
                   <p className="text-[11px] text-slate-400 italic mt-1">{item.relevance_reason}</p>
                 )}
@@ -234,7 +244,7 @@ export default function Verification() {
             </div>
 
             {/* Check Rule Badges */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
               <CheckPill label="Title Valid" valid={item.checks?.title_valid} />
               <CheckPill label="Snippet Valid" valid={item.checks?.snippet_valid} />
               <CheckPill label="HTTPS Protocol" valid={item.checks?.https_valid} />
@@ -242,6 +252,9 @@ export default function Verification() {
               <CheckPill label="Timestamp" valid={item.checks?.timestamp_valid} />
               <CheckPill label="No URL Dup" valid={!item.checks?.is_duplicate_url} />
               <CheckPill label="No Title Dup" valid={!item.checks?.is_duplicate_title} />
+              {item.checks?.doi_valid !== null && item.checks?.doi_valid !== undefined && (
+                <CheckPill label="DOI Valid" valid={item.checks.doi_valid && !item.checks.is_duplicate_doi} />
+              )}
             </div>
 
             {/* Warnings or Errors */}

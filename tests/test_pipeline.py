@@ -526,3 +526,219 @@ class TestPipelineFailureResilience:
 
         pipeline_history_store.clear()
 
+
+@pytest.mark.asyncio
+async def test_phase_4_multi_source_pipeline_end_to_end():
+    """Verify full 4-agent pipeline flows Wikipedia, arXiv, and Crossref sources cleanly."""
+    arxiv_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.12345v1</id>
+    <published>2024-01-22T00:00:00Z</published>
+    <title>Fault-Tolerant Quantum Computing</title>
+    <summary>Quantum computing error correction architectures using logical surface codes.</summary>
+    <author><name>Alice Smith</name></author>
+    <arxiv:doi>10.1103/PhysRevLett.132.010501</arxiv:doi>
+  </entry>
+</feed>
+"""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.host or ""
+        if "wikipedia.org" in host:
+            if request.url.params.get("list") == "search":
+                return httpx.Response(
+                    200,
+                    json={
+                        "query": {
+                            "search": [
+                                {
+                                    "title": "Quantum computing",
+                                    "snippet": "Quantum computing uses quantum algorithms and qubits.",
+                                    "pageid": 1,
+                                }
+                            ]
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "query": {
+                        "pages": {
+                            "1": {
+                                "pageid": 1,
+                                "title": "Quantum computing",
+                                "extract": "Quantum computing is a computational paradigm utilizing superposition and entanglement.",
+                            }
+                        }
+                    }
+                },
+                request=request,
+            )
+        if "arxiv.org" in host:
+            return httpx.Response(200, text=arxiv_xml, request=request)
+        if "crossref.org" in host:
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "message": {
+                        "items": [
+                            {
+                                "DOI": "10.1038/s41586-024-07000-1",
+                                "title": ["Quantum Computing Benchmarks"],
+                                "abstract": "<jats:p>Benchmarking fault tolerance across superconducting quantum computing processors.</jats:p>",
+                                "author": [{"given": "Bob", "family": "Jones"}],
+                                "published": {"date-parts": [[2024, 5, 10]]},
+                                "URL": "https://doi.org/10.1038/s41586-024-07000-1",
+                            }
+                        ]
+                    },
+                },
+                request=request,
+            )
+        raise AssertionError(f"Unexpected host: {host}")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        res = await run_pipeline(
+            request=PipelineRequest(
+                query="quantum computing",
+                limit=3,
+                sources=["wikipedia", "arxiv", "crossref"],
+            ),
+            client=client,
+        )
+
+    assert res.status == "success"
+    assert res.research.sources_requested == ["wikipedia", "arxiv", "crossref"]
+    assert res.research.source_breakdown == {"wikipedia": 1, "arxiv": 1, "crossref": 1}
+    assert res.verification.structurally_valid_count == 3
+    assert res.analysis.source_distribution == {"wikipedia": 1, "arxiv": 1, "crossref": 1}
+
+    obs_by_src = {obs.source_name: obs for obs in res.analysis.evidence_backed_observations}
+    assert obs_by_src["arxiv"].doi == "10.1103/PhysRevLett.132.010501"
+    assert obs_by_src["arxiv"].authors == ["Alice Smith"]
+    assert obs_by_src["crossref"].publication_date == "2024-05-10"
+
+    assert res.dashboard.source_distribution == {"wikipedia": 1, "arxiv": 1, "crossref": 1}
+    chart_ids = {c.id: c for c in res.dashboard.charts}
+    assert "chart-source-distribution" in chart_ids
+    assert chart_ids["chart-source-distribution"].is_heuristic is False
+
+
+@pytest.mark.asyncio
+async def test_phase_5_shared_context_handoffs_and_timeout_enforcement():
+    """Verify execution_id correlation, ordered handoff records, and step timeout enforcement."""
+    mock_client = build_mock_client(MOCK_WIKIPEDIA_VALID_SEARCH)
+    res = await run_pipeline(
+        request=PipelineRequest(
+            query="Artificial intelligence",
+            limit=2,
+            execution_id="exec-phase5-0001",
+            origin_platform="band",
+            origin_room_id="room-alpha",
+            requester="alice",
+        ),
+        client=mock_client,
+    )
+
+    assert res.status == "success"
+    assert res.execution_id == "exec-phase5-0001"
+    assert res.pipeline_id == "exec-phase5-0001"
+    assert res.shared_context is not None
+    assert res.shared_context.origin_platform == "band"
+    assert res.shared_context.origin_room_id == "room-alpha"
+    assert res.shared_context.shared_artifacts["sources_retrieved"] >= 1
+
+    routes = [(h.from_agent, h.to_agent, h.status) for h in res.handoffs]
+    assert routes[0] == ("band_room", "orchestrator", "completed")
+    assert ("orchestrator", "data_collector", "completed") in routes
+    assert ("data_collector", "research_verification", "completed") in routes
+    assert ("research_verification", "insight_analyst", "completed") in routes
+    assert ("insight_analyst", "dashboard_builder", "completed") in routes
+    assert all(h.execution_id == "exec-phase5-0001" for h in res.handoffs)
+
+    # Verify per-step timeout triggers clean failed handoff + skipped downstream handoffs
+    async def slow_collect(*args, **kwargs):
+        import asyncio
+        await asyncio.sleep(0.25)
+        return {}
+
+    with patch("backend.services.pipeline_orchestrator.collect_research", side_effect=slow_collect):
+        timed_res = await run_pipeline(
+            request=PipelineRequest(
+                query="Artificial intelligence",
+                limit=2,
+                execution_id="exec-timeout-0002",
+                step_timeout_seconds=0.02,
+            )
+        )
+    assert timed_res.status == "failed"
+    assert timed_res.handoffs[0].status == "timed_out"
+    assert any(h.status == "skipped" for h in timed_res.handoffs[1:])
+
+
+@pytest.mark.asyncio
+async def test_phase_5_opt_in_lyzr_pipeline_delegation(monkeypatch):
+    """Verify opt-in insight_analyst -> lyzr_studio delegation records clean handoffs."""
+    from backend.integrations import DelegationTaskResult
+
+    monkeypatch.delenv("LYZR_API_KEY", raising=False)
+    monkeypatch.delenv("LYZR_AGENT_ID", raising=False)
+    monkeypatch.delenv("LYZR_WORKFLOW_ID", raising=False)
+
+    mock_client = build_mock_client(MOCK_WIKIPEDIA_VALID_SEARCH)
+    res_unconf = await run_pipeline(
+        request=PipelineRequest(
+            query="Artificial intelligence",
+            limit=2,
+            execution_id="exec-lyzr-unconf",
+            delegate_to_lyzr=True,
+        ),
+        client=mock_client,
+    )
+    assert res_unconf.status == "success"
+    lyzr_handoffs = [h for h in res_unconf.handoffs if h.to_agent == "lyzr_studio"]
+    assert len(lyzr_handoffs) == 1
+    assert lyzr_handoffs[0].from_agent == "insight_analyst"
+    assert lyzr_handoffs[0].protocol == "lyzr_rest_v3"
+    assert lyzr_handoffs[0].status == "rejected"
+
+    mock_lyzr_res = DelegationTaskResult(
+        task_id="task-lyzr-1",
+        execution_id="exec-lyzr-ok",
+        target_platform="lyzr",
+        action="delegate_analysis",
+        status="completed",
+        output={"response": "Verified AI summary by Lyzr."},
+        output_valid=True,
+        duration_ms=42.5,
+        timestamp="2026-11-12T00:00:00Z",
+    )
+    mock_client2 = build_mock_client(MOCK_WIKIPEDIA_VALID_SEARCH)
+    with patch(
+        "backend.services.pipeline_orchestrator.integration_registry.delegate",
+        new=AsyncMock(return_value=mock_lyzr_res),
+    ):
+        res_ok = await run_pipeline(
+            request=PipelineRequest(
+                query="Artificial intelligence",
+                limit=2,
+                execution_id="exec-lyzr-ok",
+                delegate_to_lyzr=True,
+            ),
+            client=mock_client2,
+        )
+    assert res_ok.status == "success"
+    assert res_ok.shared_context.shared_artifacts["lyzr_review"] == {
+        "response": "Verified AI summary by Lyzr."
+    }
+    ok_handoff = [h for h in res_ok.handoffs if h.to_agent == "lyzr_studio"][0]
+    assert ok_handoff.status == "completed"
+    assert ok_handoff.output_validation_passed is True
+
+
+
+

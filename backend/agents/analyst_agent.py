@@ -180,6 +180,7 @@ def validate_report_consistency(research: Dict[str, Any], verification: Dict[str
             or checks.get("domain_allowed") is False
             or checks.get("title_valid") is False
             or checks.get("snippet_valid") is False
+            or checks.get("doi_valid") is False
         )
 
         if status == "valid" and (essential_failed or len(errors) > 0):
@@ -252,6 +253,8 @@ def filter_eligible_evidence(
         ts_ok = checks.get("timestamp_valid", True)
         dup_url = checks.get("is_duplicate_url", False)
         dup_title = checks.get("is_duplicate_title", False)
+        doi_ok = checks.get("doi_valid") is not False
+        dup_doi = checks.get("is_duplicate_doi", False)
 
         is_eligible = (
             title_ok
@@ -259,8 +262,10 @@ def filter_eligible_evidence(
             and https_ok
             and domain_ok
             and ts_ok
+            and doi_ok
             and not dup_url
             and not dup_title
+            and not dup_doi
             and status != "invalid"
             and len(errors) == 0
         )
@@ -274,7 +279,9 @@ def filter_eligible_evidence(
                 reasons.append("insecure protocol")
             if not domain_ok:
                 reasons.append("disallowed domain")
-            if dup_url or dup_title:
+            if not doi_ok:
+                reasons.append("invalid DOI")
+            if dup_url or dup_title or dup_doi:
                 reasons.append("duplicate record")
             if not title_ok or not snippet_ok:
                 reasons.append("missing title/snippet")
@@ -421,6 +428,12 @@ def build_observations(
 
         confidence, confidence_reason = assess_observation_confidence(item, v_item)
         is_weak = (confidence == "low")
+        source_name = str(item.get("source_name") or "wikipedia").strip().lower()
+        source_type = str(item.get("source_type") or "wikipedia_extract").strip()
+        pub_date = item.get("publication_date")
+        doi = item.get("doi")
+        raw_authors = item.get("authors")
+        authors = [str(a).strip() for a in raw_authors if str(a).strip()] if isinstance(raw_authors, list) else []
 
         observations.append(
             EvidenceObservation(
@@ -430,6 +443,11 @@ def build_observations(
                 confidence=confidence,
                 confidence_reason=confidence_reason,
                 is_weakly_relevant=is_weak,
+                source_name=source_name,
+                source_type=source_type,
+                publication_date=pub_date if isinstance(pub_date, str) else None,
+                doi=doi if isinstance(doi, str) else None,
+                authors=authors,
             )
         )
 
@@ -478,9 +496,14 @@ def identify_information_gaps(
     topic: str,
     eligible_items: List[Dict[str, Any]],
     excluded_count: int,
+    source_errors: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """Identify empirical and structural gaps in the research base."""
     gaps: List[str] = []
+
+    if source_errors:
+        for src, err in source_errors.items():
+            gaps.append(f"Partial retrieval failure from provider '{src}': {err}")
 
     if not eligible_items:
         gaps.append(f"Zero eligible sources available for topic '{topic}'.")
@@ -511,8 +534,14 @@ def identify_information_gaps(
             "Sparse evidence base: Cross-source corroboration is constrained by having fewer than two verified sources."
         )
 
-    gaps.append("Evidence is derived from encyclopedia summary snippets rather than full primary papers.")
-    gaps.append("Real-time chronological updates and empirical performance metrics are unrepresented in snippets.")
+    source_names = {str(item.get("source_name") or "wikipedia").lower() for item in eligible_items}
+    if source_names == {"wikipedia"}:
+        gaps.append("Evidence is derived from encyclopedia summary snippets rather than full primary papers.")
+    else:
+        gaps.append(
+            "Evidence relies on abstracts, encyclopedia extracts, and publication metadata rather than full-text PDF bodies."
+        )
+    gaps.append("Real-time chronological updates and empirical benchmark tables are unrepresented in summary extracts.")
 
     return gaps
 
@@ -602,12 +631,17 @@ async def analyze_research(
     themes = cluster_themes(eligible_items)
     observations = build_observations(eligible_items, v_results)
     summary = generate_executive_summary(topic, eligible_items, themes, keywords)
-    gaps = identify_information_gaps(topic, eligible_items, excluded_count)
+    source_errors = research_data.get("source_errors") if isinstance(research_data.get("source_errors"), dict) else None
+    gaps = identify_information_gaps(topic, eligible_items, excluded_count, source_errors=source_errors)
     recs = generate_recommendations(topic, themes, keywords, has_evidence=(eligible_count > 0))
+
+    source_distribution = dict(
+        Counter(str(item.get("source_name") or "wikipedia").strip().lower() for item in eligible_items)
+    )
 
     limitations = [
         "Analysis relies on deterministic lexical extraction, keyword frequency weighting, and rule-based clustering without generative LLM extrapolation.",
-        "Findings are constrained strictly to text extracts verified by the Research Verification Agent.",
+        "Findings are constrained strictly to text extracts and abstracts verified by the Research Verification Agent.",
         "Structural validity confirms protocol and domain compliance, not infallible factual truth.",
         "Confidence ratings reflect evidence depth and topical relevance, not absolute empirical certainty.",
     ]
@@ -622,6 +656,7 @@ async def analyze_research(
         "total_sources_evaluated": total_sources,
         "eligible_sources_count": eligible_count,
         "excluded_sources_count": excluded_count,
+        "source_distribution": source_distribution,
         "executive_summary": summary,
         "key_themes": [t.model_dump() for t in themes],
         "important_keywords": keywords,

@@ -1,0 +1,65 @@
+{
+  "phase": "5",
+  "title": "IntelliScope AI Live Sponsor Integration Check",
+  "generated_at": "2026-11-13T15:47:12.460058+00:00",
+  "summary": {
+    "total": 5,
+    "passed": 2,
+    "failed": 0,
+    "external_outages": 0,
+    "skipped": 3
+  },
+  "platforms": [
+    {
+      "platform_id": "band",
+      "display_name": "BAND (Agentic Mesh)",
+      "category": "live_tested",
+      "credentials_present": true,
+      "test_kind": "live_rest_auth_probe",
+      "status": "passed",
+      "probe_status": "connected",
+      "error": null,
+      "notes": "Live-verified BAND SimpleAdapter runtime (agent_config.yaml); real room message & agent response tested at 2026-11-13T15:46:13.728942+00:00."
+    },
+    {
+      "platform_id": "agent37",
+      "display_name": "Agent37 Cloud Sandbox",
+      "category": "partial",
+      "credentials_present": false,
+      "test_kind": "live_sandbox_health",
+      "status": "skipped",
+      "reason": "AGENT37_API_KEY / AGENT37_INSTANCE_ID not configured."
+    },
+    {
+      "platform_id": "lyzr",
+      "display_name": "Lyzr Agent Studio",
+      "category": "partial",
+      "credentials_present": false,
+      "test_kind": "live_api_probe",
+      "status": "skipped",
+      "reason": "LYZR_API_KEY / LYZR_AGENT_ID not configured."
+    },
+    {
+      "platform_id": "adal",
+      "display_name": "AdaL Agent CLI / SDK",
+      "category": "partial",
+      "mandatory_for_track": true,
+      "credentials_present": false,
+      "runtime_state": "not_installed",
+      "test_kind": "local_runtime_availability_probe",
+      "status": "skipped",
+      "reason": "Project `.atskills/intelliscope-research/SKILL.md` present. `adal` CLI and `adal_agent_sdk` are not installed on this host; install AdaL (`curl -fsSL https://adal.sylph.ai/install.sh | bash`) and set ADAL_ENABLED=true to run live AdaL sessions."
+    },
+    {
+      "platform_id": "finch",
+      "display_name": "Finch Desktop (MCP / Skill)",
+      "category": "implemented",
+      "mandatory_for_track": true,
+      "credentials_present": true,
+      "runtime_state": "ready",
+      "test_kind": "local_mcp_stdio_handshake_probe",
+      "status": "passed",
+      "reason": "Official Finch MCP JSON-RPC stdio server (scripts/intelliscope_mcp_server.py), mcp_servers.json, and SKILL.md implemented and locally protocol-verified. Live Finch Desktop GUI turn requires opening Finch Desktop on a workstation."
+    }
+  ]
+}

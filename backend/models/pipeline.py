@@ -10,15 +10,20 @@ from typing import Any, Dict, List, Literal, Optional
 import uuid
 from pydantic import BaseModel, Field, field_validator
 
+from backend.integrations.models import AgentHandoffRecord, ExecutionContext
 from backend.models.analyst import AnalysisResponse
 from backend.models.dashboard import DashboardResponse
-from backend.models.research import ResearchResponse
+from backend.models.research import (
+    ResearchResponse,
+    SourceLiteral,
+    validate_and_normalize_sources,
+)
 from backend.models.verification import VerificationResponse
 
 
 class AgentExecutionStatus(BaseModel):
     """
-    Execution status, timing, and diagnostic details for an individual platform agent.
+    Execution status, timing, validation state, and diagnostic details for an individual platform agent.
     """
     agent_key: str = Field(
         ...,
@@ -36,6 +41,26 @@ class AgentExecutionStatus(BaseModel):
         default=0.0,
         ge=0.0,
         description="Execution time for this agent in milliseconds"
+    )
+    task_id: Optional[str] = Field(
+        default=None,
+        description="Unique delegation task ID assigned to this agent execution step",
+    )
+    started_at: Optional[str] = Field(
+        default=None,
+        description="ISO 8601 UTC timestamp when agent step started",
+    )
+    completed_at: Optional[str] = Field(
+        default=None,
+        description="ISO 8601 UTC timestamp when agent step finished",
+    )
+    input_valid: Optional[bool] = Field(
+        default=None,
+        description="Whether upstream input passed schema validation",
+    )
+    output_valid: Optional[bool] = Field(
+        default=None,
+        description="Whether this agent's output passed Pydantic validation",
     )
     details: Optional[str] = Field(
         default=None,
@@ -61,7 +86,41 @@ class PipelineRequest(BaseModel):
         default=5,
         ge=1,
         le=10,
-        description="Maximum number of research sources to collect (1-10)"
+        description="Maximum number of research sources to collect per provider (1-10)"
+    )
+    sources: List[SourceLiteral] = Field(
+        default_factory=lambda: ["wikipedia"],
+        min_length=1,
+        description="Selected research providers: one or more of 'wikipedia', 'arxiv', 'crossref'"
+    )
+    execution_id: Optional[str] = Field(
+        default=None,
+        description="Optional external correlation UUID (auto-generated when omitted)",
+    )
+    origin_platform: str = Field(
+        default="api",
+        max_length=40,
+        description="Originating platform or UI ('api', 'web_ui', 'band', 'cli')",
+    )
+    origin_room_id: Optional[str] = Field(
+        default=None,
+        max_length=120,
+        description="Optional originating collaboration room identifier",
+    )
+    requester: Optional[str] = Field(
+        default=None,
+        max_length=120,
+        description="Optional non-secret caller or requester display identifier",
+    )
+    step_timeout_seconds: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        le=120.0,
+        description="Optional per-agent step timeout override in seconds",
+    )
+    delegate_to_lyzr: bool = Field(
+        default=False,
+        description="Optional opt-in external delegation of grounded context to Lyzr Studio when LYZR credentials exist",
     )
 
     @field_validator("query")
@@ -74,6 +133,12 @@ class PipelineRequest(BaseModel):
         if len(stripped) > 300:
             raise ValueError("Query string cannot exceed 300 characters.")
         return stripped
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def validate_sources(cls, v: Optional[List[str]]) -> List[str]:
+        """Validate and normalize selected source providers."""
+        return validate_and_normalize_sources(v)
 
 
 class PipelineResponse(BaseModel):
@@ -121,6 +186,18 @@ class PipelineResponse(BaseModel):
         default=None,
         description="Output from the Dashboard Builder Agent"
     )
+    execution_id: Optional[str] = Field(
+        default=None,
+        description="Correlated execution ID shared across context, handoffs, and BAND events",
+    )
+    shared_context: Optional[ExecutionContext] = Field(
+        default=None,
+        description="Shared execution context propagated across agents and platforms",
+    )
+    handoffs: List[AgentHandoffRecord] = Field(
+        default_factory=list,
+        description="Ordered trace of agent-to-agent handoffs, schema validations, and provenance counts",
+    )
     executed_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="ISO 8601 UTC timestamp of pipeline execution"
@@ -132,6 +209,9 @@ class PipelineHistorySummary(BaseModel):
     Lightweight summary of a historical pipeline run stored by the backend.
     """
     pipeline_id: str = Field(..., description="Unique execution run UUID")
+    execution_id: Optional[str] = Field(default=None, description="Shared execution correlation ID")
+    origin_platform: str = Field(default="api", description="Originating entrypoint platform")
+    handoff_count: int = Field(default=0, ge=0, description="Number of recorded agent handoffs")
     query: str = Field(..., description="Executed research topic")
     status: Literal["success", "partial_success", "failed"] = Field(
         ...,
@@ -146,6 +226,8 @@ class PipelineHistorySummary(BaseModel):
     excluded_count: int = Field(default=0, ge=0, description="Excluded invalid source count")
     quality_score: float = Field(default=0.0, ge=0.0, le=100.0, description="Structural quality score")
     theme_count: int = Field(default=0, ge=0, description="Number of themes identified")
+    sources_requested: List[str] = Field(default_factory=lambda: ["wikipedia"], description="Selected research providers")
+    source_breakdown: Dict[str, int] = Field(default_factory=dict, description="Source counts by provider")
     summary: Optional[str] = Field(default=None, description="Executive or error summary")
 
 

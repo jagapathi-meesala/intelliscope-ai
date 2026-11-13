@@ -1,0 +1,64 @@
+# ==============================================================================
+# IntelliScope AI — Render Blueprint Specification (Free Tier)
+# ==============================================================================
+# Deploys:
+#   1. intelliscope-backend: Render Free Web Service (FastAPI / Uvicorn)
+#   2. intelliscope-frontend: Render Free Static Site (React / Vite SPA)
+#
+# IMPORTANT ARCHITECTURAL NOTE:
+#   Render's free tier does NOT provide always-on background workers.
+#   The persistent BAND Collector Agent runs locally on your Ubuntu laptop
+#   and connects to this remote backend via INTELLISCOPE_BACKEND_URL.
+#   See docs/BAND_REMOTE_BACKEND_SETUP.md for complete instructions.
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. FastAPI Multi-Agent Backend Web Service (Free Tier)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: intelliscope-backend
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: PIPELINE_STEP_TIMEOUT_SECONDS
+        value: "30.0"
+      - key: INTEGRATION_DEFAULT_TIMEOUT_SECONDS
+        value: "15.0"
+      - key: INTEGRATION_MAX_RETRIES
+        value: "1"
+      - key: DEFAULT_USER_AGENT
+        value: "IntelliScopeAI/1.0 (https://github.com/jagapathi/intelliscope-ai; mailto:dev@intelliscope.ai) httpx/0.28.1"
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+
+  # ----------------------------------------------------------------------------
+  # 2. React / Vite SPA Frontend Static Site (Free Tier)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: intelliscope-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    routes:
+      # SPA rewrite rule: routes all deep paths (e.g. /results, /activity) to /index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # Build-time environment variable for Vite.
+      # Replace with your actual backend Render service URL once created.
+      - key: VITE_API_BASE_URL
+        value: https://intelliscope-backend.onrender.com
+

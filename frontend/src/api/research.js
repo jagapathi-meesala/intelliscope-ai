@@ -2,12 +2,14 @@ import apiClient from './client';
 
 /**
  * Execute the unified end-to-end multi-agent research pipeline.
- * Calls POST /pipeline with {"query": topic, "limit": limit}
+ * Calls POST /pipeline with {"query": topic, "limit": limit, "sources": sources}
  */
-export async function runPipeline({ query, limit = 5 }) {
+export async function runPipeline({ query, limit = 5, sources = ['wikipedia'], originPlatform = 'web_ui' }) {
   return apiClient.post('/pipeline', {
     query: query.trim(),
     limit: Number(limit),
+    sources: Array.isArray(sources) && sources.length > 0 ? sources : ['wikipedia'],
+    origin_platform: originPlatform,
   });
 }
 
@@ -55,10 +57,11 @@ export async function checkBackendHealth() {
  * Direct call to Data Collector Agent.
  * Calls POST /research
  */
-export async function collectResearch({ query, limit = 5 }) {
+export async function collectResearch({ query, limit = 5, sources = ['wikipedia'] }) {
   return apiClient.post('/research', {
     query: query.trim(),
     limit: Number(limit),
+    sources: Array.isArray(sources) && sources.length > 0 ? sources : ['wikipedia'],
   });
 }
 
@@ -84,5 +87,29 @@ export async function analyzeResearch(payload) {
  */
 export async function buildDashboardSpec(payload) {
   return apiClient.post('/dashboard', payload);
+}
+
+/**
+ * Retrieve honest readiness & credential status for sponsor integrations.
+ * Calls GET /integrations/status
+ */
+export async function getIntegrationsStatus() {
+  return apiClient.get('/integrations/status');
+}
+
+/**
+ * Trigger a safe non-mutating check probe for one sponsor platform.
+ * Calls POST /integrations/check/{platformId}
+ */
+export async function checkIntegrationPlatform(platformId) {
+  return apiClient.post(`/integrations/check/${encodeURIComponent(platformId)}`);
+}
+
+/**
+ * Dispatch a structured task delegation request to a sponsor adapter.
+ * Calls POST /integrations/delegate
+ */
+export async function delegateIntegrationTask(payload) {
+  return apiClient.post('/integrations/delegate', payload);
 }
 

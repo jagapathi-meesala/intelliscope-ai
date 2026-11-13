@@ -1,0 +1,514 @@
+{
+  "phase": "4.5",
+  "title": "IntelliScope AI Live Multi-Source Validation",
+  "generated_at": "2026-11-11T18:48:26.290184+00:00",
+  "query": "quantum computing",
+  "limit": 3,
+  "polite_delay_seconds": 3.0,
+  "timeout_seconds": 25.0,
+  "execution_target": "in-process FastAPI ASGI (live external HTTP to Wikipedia/arXiv/Crossref)",
+  "overall_status": "passed",
+  "endpoints_under_test": {
+    "wikipedia": "https://en.wikipedia.org/w/api.php",
+    "arxiv": "https://export.arxiv.org/api/query",
+    "crossref": "https://api.crossref.org/works"
+  },
+  "summary": {
+    "total_scenarios": 5,
+    "passed": 5,
+    "failed": 0,
+    "external_outages": 0,
+    "skipped": 0,
+    "live_network_passed": 4,
+    "live_network_failed": 0,
+    "live_network_outages": 0,
+    "hybrid_passed": 1,
+    "hybrid_failed": 0,
+    "note_on_unit_tests": "This report covers live network validation only. Mocked unit/integration tests live in tests/ and run separately via '.venv/bin/pytest -v'."
+  },
+  "scenarios": [
+    {
+      "id": "live_source_wikipedia",
+      "name": "Live Independent Source: wikipedia",
+      "test_kind": "live_network",
+      "sources": [
+        "wikipedia"
+      ],
+      "status": "passed",
+      "duration_ms": 1648.51,
+      "validation_errors": [],
+      "retrieval": {
+        "count": 3,
+        "all_urls_https": true,
+        "items_with_doi": 0,
+        "items_with_authors": 0,
+        "items_with_publication_date": 3,
+        "sample_records": [
+          {
+            "title": "Quantum computing",
+            "source_name": "wikipedia",
+            "source_type": "wikipedia_extract",
+            "source_url": "https://en.wikipedia.org/wiki/Quantum_computing",
+            "doi": null,
+            "authors": [],
+            "publication_date": "2026-11-04",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Timeline of quantum computing and communication",
+            "source_name": "wikipedia",
+            "source_type": "wikipedia_extract",
+            "source_url": "https://en.wikipedia.org/wiki/Timeline_of_quantum_computing_and_communication",
+            "doi": null,
+            "authors": [],
+            "publication_date": "2026-11-09",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Superconducting quantum computing",
+            "source_name": "wikipedia",
+            "source_type": "wikipedia_extract",
+            "source_url": "https://en.wikipedia.org/wiki/Superconducting_quantum_computing",
+            "doi": null,
+            "authors": [],
+            "publication_date": "2026-10-26",
+            "relevance": "relevant"
+          }
+        ]
+      },
+      "source_breakdown": {
+        "wikipedia": 3
+      },
+      "source_errors": {},
+      "verification": {
+        "status": "passed",
+        "quality_score": 100.0,
+        "structurally_valid_count": 3,
+        "excluded_count": 0,
+        "duplicate_dois_count": null,
+        "is_factually_verified": false
+      },
+      "analysis": {
+        "eligible_sources_count": 3,
+        "theme_count": 2,
+        "themes": [
+          "Systems, Architectures & Methods",
+          "Applications & Operational Domains"
+        ],
+        "source_distribution": {
+          "wikipedia": 3
+        }
+      },
+      "dashboard": {
+        "dashboard_id": "dash-89bf1adb9c3a",
+        "themes_count": 2,
+        "chart_ids": [
+          "chart-source-eligibility",
+          "chart-source-distribution",
+          "chart-theme-distribution",
+          "chart-keyword-frequency"
+        ],
+        "observations_count": 3,
+        "source_distribution": {
+          "wikipedia": 3
+        }
+      }
+    },
+    {
+      "id": "live_source_arxiv",
+      "name": "Live Independent Source: arxiv",
+      "test_kind": "live_network",
+      "sources": [
+        "arxiv"
+      ],
+      "status": "passed",
+      "duration_ms": 787.39,
+      "validation_errors": [],
+      "retrieval": {
+        "count": 3,
+        "all_urls_https": true,
+        "items_with_doi": 3,
+        "items_with_authors": 3,
+        "items_with_publication_date": 3,
+        "sample_records": [
+          {
+            "title": "Tierkreis: A Dataflow Framework for Hybrid Quantum-Classical Computing",
+            "source_name": "arxiv",
+            "source_type": "arxiv_paper",
+            "source_url": "https://arxiv.org/abs/2211.02350v1",
+            "doi": "10.1109/QCS56647.2022.00007",
+            "authors": [
+              "Seyon Sivarajah",
+              "Lukas Heidemann",
+              "Alan Lawrence",
+              "Ross Duncan"
+            ],
+            "publication_date": "2022-11-04",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Quantum Computing: Vision and Challenges",
+            "source_name": "arxiv",
+            "source_type": "arxiv_paper",
+            "source_url": "https://arxiv.org/abs/2403.02240v5",
+            "doi": "10.1016/B978-0-443-29096-1.00008-8",
+            "authors": [
+              "Sukhpal Singh Gill",
+              "Oktay Cetinkaya",
+              "Stefano Marrone",
+              "Daniel Claudino",
+              "David Haunschild"
+            ],
+            "publication_date": "2024-03-04",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Entangling Disciplines: Causality, Entropy and Time-Travel Paradoxes on a Quantum Computer",
+            "source_name": "arxiv",
+            "source_type": "arxiv_paper",
+            "source_url": "https://arxiv.org/abs/2506.15909v1",
+            "doi": "10.1109/QCE60285.2024.20461",
+            "authors": [
+              "Maria Violaris"
+            ],
+            "publication_date": "2025-06-18",
+            "relevance": "relevant"
+          }
+        ]
+      },
+      "source_breakdown": {
+        "arxiv": 3
+      },
+      "source_errors": {},
+      "verification": {
+        "status": "passed",
+        "quality_score": 100.0,
+        "structurally_valid_count": 3,
+        "excluded_count": 0,
+        "duplicate_dois_count": null,
+        "is_factually_verified": false
+      },
+      "analysis": {
+        "eligible_sources_count": 3,
+        "theme_count": 4,
+        "themes": [
+          "Systems, Architectures & Methods",
+          "Applications & Operational Domains",
+          "Foundations & Theoretical Concepts",
+          "Ethics, Governance & Future Horizons"
+        ],
+        "source_distribution": {
+          "arxiv": 3
+        }
+      },
+      "dashboard": {
+        "dashboard_id": "dash-d3df6c37315c",
+        "themes_count": 4,
+        "chart_ids": [
+          "chart-source-eligibility",
+          "chart-source-distribution",
+          "chart-theme-distribution",
+          "chart-keyword-frequency"
+        ],
+        "observations_count": 3,
+        "source_distribution": {
+          "arxiv": 3
+        }
+      }
+    },
+    {
+      "id": "live_source_crossref",
+      "name": "Live Independent Source: crossref",
+      "test_kind": "live_network",
+      "sources": [
+        "crossref"
+      ],
+      "status": "passed",
+      "duration_ms": 1456.21,
+      "validation_errors": [],
+      "retrieval": {
+        "count": 3,
+        "all_urls_https": true,
+        "items_with_doi": 3,
+        "items_with_authors": 2,
+        "items_with_publication_date": 3,
+        "sample_records": [
+          {
+            "title": "Quantum Computing I",
+            "source_name": "crossref",
+            "source_type": "crossref_abstract",
+            "source_url": "https://doi.org/10.1093/oso/9780198854227.003.0015",
+            "doi": "10.1093/oso/9780198854227.003.0015",
+            "authors": [
+              "M. Suhail Zubairy"
+            ],
+            "publication_date": "2020-05-07",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Quantum Computing II",
+            "source_name": "crossref",
+            "source_type": "crossref_abstract",
+            "source_url": "https://doi.org/10.1093/oso/9780198854227.003.0016",
+            "doi": "10.1093/oso/9780198854227.003.0016",
+            "authors": [
+              "M. Suhail Zubairy"
+            ],
+            "publication_date": "2020-05-07",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Distributed Quantum Computing – Classical and Quantum",
+            "source_name": "crossref",
+            "source_type": "crossref_work",
+            "source_url": "https://doi.org/10.1002/9781394185542.ch3",
+            "doi": "10.1002/9781394185542.ch3",
+            "authors": [],
+            "publication_date": "2023-12",
+            "relevance": "relevant"
+          }
+        ]
+      },
+      "source_breakdown": {
+        "crossref": 3
+      },
+      "source_errors": {},
+      "verification": {
+        "status": "passed",
+        "quality_score": 100.0,
+        "structurally_valid_count": 3,
+        "excluded_count": 0,
+        "duplicate_dois_count": null,
+        "is_factually_verified": false
+      },
+      "analysis": {
+        "eligible_sources_count": 3,
+        "theme_count": 3,
+        "themes": [
+          "Systems, Architectures & Methods",
+          "Applications & Operational Domains",
+          "Foundations & Theoretical Concepts"
+        ],
+        "source_distribution": {
+          "crossref": 3
+        }
+      },
+      "dashboard": {
+        "dashboard_id": "dash-23035fdc5c18",
+        "themes_count": 3,
+        "chart_ids": [
+          "chart-source-eligibility",
+          "chart-source-distribution",
+          "chart-theme-distribution",
+          "chart-keyword-frequency"
+        ],
+        "observations_count": 3,
+        "source_distribution": {
+          "crossref": 3
+        }
+      }
+    },
+    {
+      "id": "live_combined_multisource_pipeline",
+      "name": "Live Combined Multi-Source Pipeline (wikipedia + arxiv + crossref)",
+      "test_kind": "live_network",
+      "sources": [
+        "wikipedia",
+        "arxiv",
+        "crossref"
+      ],
+      "status": "passed",
+      "duration_ms": 2747.72,
+      "pipeline_id": "792c9ad4-7c60-40ad-a38f-9f44453976e6",
+      "pipeline_status": "success",
+      "validation_errors": [],
+      "agent_statuses": {
+        "data_collector": {
+          "agent_key": "data_collector",
+          "agent_name": "Data Collector Agent",
+          "status": "completed",
+          "duration_ms": 2738.89,
+          "details": "Retrieved 9 external source(s) across wikipedia, arxiv, crossref",
+          "error": null
+        },
+        "research_verification": {
+          "agent_key": "research_verification",
+          "agent_name": "Research Verification Agent",
+          "status": "completed",
+          "duration_ms": 0.17,
+          "details": "Quality score: 100/100 (9 valid, 0 excluded, 9 directly relevant, 0 weakly relevant)",
+          "error": null
+        },
+        "insight_analyst": {
+          "agent_key": "insight_analyst",
+          "agent_name": "Insight Analyst Agent",
+          "status": "completed",
+          "duration_ms": 0.94,
+          "details": "Analyzed 9 eligible source(s) (0 excluded), 4 theme(s)",
+          "error": null
+        },
+        "dashboard_builder": {
+          "agent_key": "dashboard_builder",
+          "agent_name": "Dashboard Builder Agent",
+          "status": "completed",
+          "duration_ms": 1.22,
+          "details": "Generated 4 KPI card(s) and 4 chart specification(s)",
+          "error": null
+        }
+      },
+      "retrieval": {
+        "count": 9,
+        "all_urls_https": true,
+        "items_with_doi": 6,
+        "items_with_authors": 5,
+        "items_with_publication_date": 9,
+        "sample_records": [
+          {
+            "title": "Quantum computing",
+            "source_name": "wikipedia",
+            "source_type": "wikipedia_extract",
+            "source_url": "https://en.wikipedia.org/wiki/Quantum_computing",
+            "doi": null,
+            "authors": [],
+            "publication_date": "2026-11-04",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Tierkreis: A Dataflow Framework for Hybrid Quantum-Classical Computing",
+            "source_name": "arxiv",
+            "source_type": "arxiv_paper",
+            "source_url": "https://arxiv.org/abs/2211.02350v1",
+            "doi": "10.1109/QCS56647.2022.00007",
+            "authors": [
+              "Seyon Sivarajah",
+              "Lukas Heidemann",
+              "Alan Lawrence",
+              "Ross Duncan"
+            ],
+            "publication_date": "2022-11-04",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Quantum Computing I",
+            "source_name": "crossref",
+            "source_type": "crossref_abstract",
+            "source_url": "https://doi.org/10.1093/oso/9780198854227.003.0015",
+            "doi": "10.1093/oso/9780198854227.003.0015",
+            "authors": [
+              "M. Suhail Zubairy"
+            ],
+            "publication_date": "2020-05-07",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Superconducting quantum computing",
+            "source_name": "wikipedia",
+            "source_type": "wikipedia_extract",
+            "source_url": "https://en.wikipedia.org/wiki/Superconducting_quantum_computing",
+            "doi": null,
+            "authors": [],
+            "publication_date": "2026-10-26",
+            "relevance": "relevant"
+          },
+          {
+            "title": "Quantum Computing: Vision and Challenges",
+            "source_name": "arxiv",
+            "source_type": "arxiv_paper",
+            "source_url": "https://arxiv.org/abs/2403.02240v5",
+            "doi": "10.1016/B978-0-443-29096-1.00008-8",
+            "authors": [
+              "Sukhpal Singh Gill",
+              "Oktay Cetinkaya",
+              "Stefano Marrone",
+              "Daniel Claudino",
+              "David Haunschild"
+            ],
+            "publication_date": "2024-03-04",
+            "relevance": "relevant"
+          }
+        ]
+      },
+      "source_breakdown": {
+        "wikipedia": 3,
+        "arxiv": 3,
+        "crossref": 3
+      },
+      "source_errors": {},
+      "verification": {
+        "status": "passed",
+        "quality_score": 100.0,
+        "structurally_valid_count": 9,
+        "excluded_count": 0,
+        "duplicate_dois_count": null,
+        "is_factually_verified": false
+      },
+      "analysis": {
+        "eligible_sources_count": 9,
+        "theme_count": 4,
+        "themes": [
+          "Systems, Architectures & Methods",
+          "Applications & Operational Domains",
+          "Foundations & Theoretical Concepts",
+          "Ethics, Governance & Future Horizons"
+        ],
+        "source_distribution": {
+          "wikipedia": 3,
+          "arxiv": 3,
+          "crossref": 3
+        },
+        "information_gaps": [
+          "Evidence relies on abstracts, encyclopedia extracts, and publication metadata rather than full-text PDF bodies.",
+          "Real-time chronological updates and empirical benchmark tables are unrepresented in summary extracts."
+        ]
+      },
+      "dashboard": {
+        "dashboard_id": "dash-018be48c3a28",
+        "themes_count": 4,
+        "chart_ids": [
+          "chart-source-eligibility",
+          "chart-source-distribution",
+          "chart-theme-distribution",
+          "chart-keyword-frequency"
+        ],
+        "observations_count": 9,
+        "source_distribution": {
+          "wikipedia": 3,
+          "arxiv": 3,
+          "crossref": 3
+        },
+        "sources_represented": [
+          "arxiv",
+          "crossref",
+          "wikipedia"
+        ]
+      }
+    },
+    {
+      "id": "controlled_partial_failure_honesty",
+      "name": "Controlled Partial Failure Honesty (live wikipedia+crossref + simulated arxiv timeout)",
+      "test_kind": "hybrid_controlled_partial_failure",
+      "sources": [
+        "wikipedia",
+        "arxiv",
+        "crossref"
+      ],
+      "status": "passed",
+      "duration_ms": 1743.83,
+      "validation_errors": [],
+      "source_breakdown": {
+        "wikipedia": 3,
+        "arxiv": 0,
+        "crossref": 3
+      },
+      "source_errors": {
+        "arxiv": "Controlled live validation timeout probe for arXiv"
+      },
+      "information_gaps": [
+        "Partial retrieval failure from provider 'arxiv': Controlled live validation timeout probe for arXiv",
+        "Evidence relies on abstracts, encyclopedia extracts, and publication metadata rather than full-text PDF bodies.",
+        "Real-time chronological updates and empirical benchmark tables are unrepresented in summary extracts."
+      ],
+      "collector_details": "Retrieved 6 external source(s) across wikipedia, arxiv, crossref (partial error: arxiv)"
+    }
+  ]
+}

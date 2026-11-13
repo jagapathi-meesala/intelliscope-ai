@@ -11,6 +11,7 @@ from backend.agents.data_agent import (
     AGENT_CAPABILITIES,
     AGENT_NAME,
     AGENT_STATUS,
+    DataCollectorRateLimitError,
     DataCollectorResponseError,
     DataCollectorTimeoutError,
     DataCollectorUpstreamError,
@@ -23,6 +24,7 @@ from backend.agents.data_agent import (
     is_navigation_or_empty,
     truncate_snippet,
 )
+from backend.models.research import ResearchRequest, validate_and_normalize_sources
 
 
 @pytest.mark.asyncio
@@ -565,5 +567,172 @@ async def test_collect_research_navigation_extract_fallback():
     assert item["source_type"] == "wikipedia_search_snippet"
     assert "Substantive fallback snippet" in item["snippet"]
 
+
+_MULTI_ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.10001v1</id>
+    <published>2024-01-10T00:00:00Z</published>
+    <title>Quantum Computing Algorithms</title>
+    <summary>Survey of quantum computing algorithms and variational circuits.</summary>
+    <author><name>Alice Quantum</name></author>
+    <arxiv:doi>10.1000/arxiv.10001</arxiv:doi>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2401.10002v1</id>
+    <published>2024-01-12T00:00:00Z</published>
+    <title>Quantum Error Correction Survey</title>
+    <summary>Fault-tolerant quantum computing thresholds with LDPC codes.</summary>
+    <author><name>Bob Qubit</name></author>
+  </entry>
+</feed>
+"""
+
+
+def _multi_source_handler(fail_sources=None):
+    fail_sources = set(fail_sources or [])
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.host or ""
+        if "wikipedia.org" in host:
+            if "wikipedia" in fail_sources:
+                return httpx.Response(503, text="Wikipedia unavailable", request=request)
+            if request.url.params.get("list") == "search":
+                return httpx.Response(
+                    200,
+                    json={
+                        "query": {
+                            "search": [
+                                {"title": "Quantum computing", "snippet": "Quantum computing basics.", "pageid": 1},
+                                {"title": "Quantum gate", "snippet": "Quantum logic gates.", "pageid": 2},
+                            ]
+                        }
+                    },
+                    request=request,
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "query": {
+                        "pages": {
+                            "1": {"pageid": 1, "title": "Quantum computing", "extract": "Quantum computing uses qubits."},
+                            "2": {"pageid": 2, "title": "Quantum gate", "extract": "Quantum gates operate on qubits."},
+                        }
+                    }
+                },
+                request=request,
+            )
+
+        if "arxiv.org" in host:
+            if "arxiv" in fail_sources:
+                return httpx.Response(429, headers={"Retry-After": "10"}, text="Rate limited", request=request)
+            return httpx.Response(200, text=_MULTI_ARXIV_XML, request=request)
+
+        if "crossref.org" in host:
+            if "crossref" in fail_sources:
+                return httpx.Response(503, text="Crossref down", request=request)
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "message": {
+                        "items": [
+                            {
+                                "DOI": "10.1038/qc-2024-1",
+                                "title": ["Quantum Computing Benchmarks"],
+                                "abstract": "<jats:p>Benchmarking noisy intermediate-scale quantum computing devices.</jats:p>",
+                                "author": [{"given": "Ada", "family": "Lovelace"}],
+                                "published": {"date-parts": [[2024, 5, 1]]},
+                                "URL": "https://doi.org/10.1038/qc-2024-1",
+                            },
+                            {
+                                "DOI": "10.1038/qc-2024-2",
+                                "title": ["Quantum Computing Cryogenics"],
+                                "abstract": "<jats:p>Cryogenic control electronics for quantum computing.</jats:p>",
+                                "author": [{"given": "Grace", "family": "Hopper"}],
+                                "published": {"date-parts": [[2024, 6, 1]]},
+                                "URL": "https://doi.org/10.1038/qc-2024-2",
+                            },
+                        ]
+                    },
+                },
+                request=request,
+            )
+
+        raise AssertionError(f"Unexpected host in test transport: {host}")
+
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_collect_research_multi_source_interleaving_and_breakdown():
+    """Verify multi-source collection interleaves providers round-robin and builds source_breakdown."""
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_multi_source_handler())) as client:
+        result = await collect_research(
+            "quantum computing",
+            limit=4,
+            client=client,
+            sources=["wikipedia", "arxiv", "crossref"],
+        )
+
+    assert result["sources_requested"] == ["wikipedia", "arxiv", "crossref"]
+    assert result["source_errors"] == {}
+    assert result["result_count"] == 6
+    providers = [item["source_name"] for item in result["results"]]
+    # Round-robin order across the three sources (2 items per provider)
+    assert providers == ["wikipedia", "arxiv", "crossref", "wikipedia", "arxiv", "crossref"]
+    assert result["source_breakdown"] == {"wikipedia": 2, "arxiv": 2, "crossref": 2}
+
+
+@pytest.mark.asyncio
+async def test_collect_research_partial_source_failure():
+    """Verify healthy sources still return results when one selected source fails."""
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_multi_source_handler(fail_sources={"crossref"}))
+    ) as client:
+        result = await collect_research(
+            "quantum computing",
+            limit=4,
+            client=client,
+            sources=["wikipedia", "arxiv", "crossref"],
+        )
+
+    assert result["result_count"] > 0
+    assert "crossref" in result["source_errors"]
+    assert "wikipedia" not in result["source_errors"]
+    assert "arxiv" not in result["source_errors"]
+    assert result["source_breakdown"] == {"wikipedia": 2, "arxiv": 2, "crossref": 0}
+
+
+@pytest.mark.asyncio
+async def test_collect_research_all_selected_sources_fail_raises():
+    """Verify complete upstream failure raises the primary collector exception."""
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_multi_source_handler(fail_sources={"arxiv"}))
+    ) as client:
+        with pytest.raises(DataCollectorRateLimitError, match="429"):
+            await collect_research("quantum computing", limit=3, client=client, sources=["arxiv"])
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_multi_source_handler(fail_sources={"wikipedia", "crossref"}))
+    ) as client:
+        with pytest.raises(DataCollectorUpstreamError):
+            await collect_research(
+                "quantum computing",
+                limit=3,
+                client=client,
+                sources=["wikipedia", "crossref"],
+            )
+
+
+def test_source_selection_validation_and_normalization():
+    assert validate_and_normalize_sources(None) == ["wikipedia"]
+    assert validate_and_normalize_sources(["arXiv", "Wikipedia", "arxiv"]) == ["arxiv", "wikipedia"]
+
+    with pytest.raises(ValueError, match="Unsupported"):
+        validate_and_normalize_sources(["wikipedia", "unknown_db"])
+
+    with pytest.raises(ValueError, match="Unsupported"):
+        ResearchRequest(query="quantum computing", sources=["invalid_source"])
 
 

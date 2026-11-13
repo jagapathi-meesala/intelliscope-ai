@@ -1544,5 +1544,263 @@ def test_phase_3_4_pipeline_history_latest_and_themes_endpoints():
     pipeline_history_store.clear()
 
 
+_API_ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2402.11111v1</id>
+    <published>2024-02-15T00:00:00Z</published>
+    <title>Quantum Computing Error Mitigation</title>
+    <summary>Quantum computing noise mitigation techniques and circuit folding strategies.</summary>
+    <author><name>Alice Smith</name></author>
+    <arxiv:doi>10.1000/arxiv.2402.11111</arxiv:doi>
+  </entry>
+</feed>
+"""
+
+
+def _api_multi_source_side_effect(rate_limit_arxiv: bool = False):
+    async def _mock_get(url, params=None, headers=None, **kwargs):
+        url_str = str(url)
+        if "wikipedia.org" in url_str:
+            if params and params.get("list") == "search":
+                return httpx.Response(
+                    200,
+                    json={
+                        "query": {
+                            "search": [
+                                {
+                                    "title": "Quantum computing",
+                                    "snippet": "Quantum computing algorithms and qubit architectures.",
+                                    "pageid": 1,
+                                }
+                            ]
+                        }
+                    },
+                    request=httpx.Request("GET", url_str),
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "query": {
+                        "pages": {
+                            "1": {
+                                "pageid": 1,
+                                "title": "Quantum computing",
+                                "extract": "Quantum computing uses quantum mechanics for computation.",
+                            }
+                        }
+                    }
+                },
+                request=httpx.Request("GET", url_str),
+            )
+        if "arxiv.org" in url_str:
+            if rate_limit_arxiv:
+                return httpx.Response(
+                    429,
+                    headers={"Retry-After": "20"},
+                    text="Rate limited",
+                    request=httpx.Request("GET", url_str),
+                )
+            return httpx.Response(200, text=_API_ARXIV_XML, request=httpx.Request("GET", url_str))
+        if "crossref.org" in url_str:
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "message": {
+                        "items": [
+                            {
+                                "DOI": "10.1038/s41586-024-07000-1",
+                                "title": ["Quantum Computing Hardware"],
+                                "abstract": "<jats:p>Experimental superconducting quantum computing processors.</jats:p>",
+                                "author": [{"given": "Ada", "family": "Lovelace"}],
+                                "published": {"date-parts": [[2024, 4, 1]]},
+                                "URL": "https://doi.org/10.1038/s41586-024-07000-1",
+                            }
+                        ]
+                    },
+                },
+                request=httpx.Request("GET", url_str),
+            )
+        raise AssertionError(f"Unexpected URL: {url_str}")
+
+    return _mock_get
+
+
+def test_phase_4_research_multi_source_and_default_compatibility():
+    """Verify POST /research preserves default wikipedia and supports multi-source requests."""
+    with patch.object(
+        httpx.AsyncClient, "get", side_effect=_api_multi_source_side_effect()
+    ):
+        default_resp = client.post("/research", json={"query": "quantum computing", "limit": 1})
+        assert default_resp.status_code == 200
+        d_json = default_resp.json()
+        assert d_json["sources_requested"] == ["wikipedia"]
+        assert d_json["source_breakdown"] == {"wikipedia": 1}
+
+        multi_resp = client.post(
+            "/research",
+            json={
+                "query": "quantum computing",
+                "limit": 3,
+                "sources": ["wikipedia", "arxiv", "crossref"],
+            },
+        )
+        assert multi_resp.status_code == 200
+        m_json = multi_resp.json()
+        assert m_json["sources_requested"] == ["wikipedia", "arxiv", "crossref"]
+        assert m_json["source_breakdown"] == {"wikipedia": 1, "arxiv": 1, "crossref": 1}
+        assert m_json["source_errors"] == {}
+        for item in m_json["results"]:
+            assert "source_name" in item
+            assert "abstract" in item
+
+
+def test_phase_4_research_invalid_source_422_and_rate_limit_429():
+    """Verify invalid source yields 422 and upstream HTTP 429 maps to 429."""
+    bad_resp = client.post(
+        "/research",
+        json={"query": "quantum computing", "sources": ["wikipedia", "nonexistent_db"]},
+    )
+    assert bad_resp.status_code == 422
+
+    with patch.object(
+        httpx.AsyncClient,
+        "get",
+        side_effect=_api_multi_source_side_effect(rate_limit_arxiv=True),
+    ):
+        rate_resp = client.post(
+            "/research",
+            json={"query": "quantum computing", "limit": 2, "sources": ["arxiv"]},
+        )
+        assert rate_resp.status_code == 429
+
+
+def test_phase_4_pipeline_multi_source_and_history_summary():
+    """Verify POST /pipeline and GET /pipeline/history track multi-source breakdowns."""
+    from backend.services.history_store import pipeline_history_store
+
+    pipeline_history_store.clear()
+    with patch.object(
+        httpx.AsyncClient, "get", side_effect=_api_multi_source_side_effect()
+    ):
+        resp = client.post(
+            "/pipeline",
+            json={
+                "query": "quantum computing",
+                "limit": 3,
+                "sources": ["wikipedia", "arxiv", "crossref"],
+            },
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert data["research"]["sources_requested"] == ["wikipedia", "arxiv", "crossref"]
+    assert data["research"]["source_breakdown"] == {"wikipedia": 1, "arxiv": 1, "crossref": 1}
+    assert data["dashboard"]["source_distribution"] == {"wikipedia": 1, "arxiv": 1, "crossref": 1}
+
+    hist = client.get("/pipeline/history").json()
+    assert hist["total_runs"] == 1
+    assert hist["runs"][0]["sources_requested"] == ["wikipedia", "arxiv", "crossref"]
+    assert hist["runs"][0]["source_breakdown"] == {"wikipedia": 1, "arxiv": 1, "crossref": 1}
+
+    pipeline_history_store.clear()
+
+
+def test_phase_5_integrations_status_check_and_delegate_endpoints(monkeypatch, tmp_path):
+    """Verify GET /integrations/status, POST /integrations/check, and POST /integrations/delegate."""
+    from types import SimpleNamespace
+    from backend.integrations import integration_registry
+
+    monkeypatch.setattr(
+        "backend.integrations.band_adapter.LIVE_BAND_VERIFICATION_FILE",
+        tmp_path / "missing_live_band.json",
+    )
+    integration_registry.clear_delegations()
+
+    status_resp = client.get("/integrations/status")
+    assert status_resp.status_code == 200
+    body = status_resp.json()
+    assert set(body["platforms"].keys()) == {"band", "lyzr", "agent37", "adal", "finch"}
+    assert set(body["summary"].keys()) == {"live_tested", "implemented", "partial", "not_integrated"}
+    assert body["platforms"]["band"]["status"] == "implemented"
+    assert body["platforms"]["finch"]["status"] == "implemented"
+    assert body["platforms"]["band"]["mandatory_for_track"] is True
+    assert body["platforms"]["lyzr"]["mandatory_for_track"] is True
+    assert body["platforms"]["adal"]["mandatory_for_track"] is True
+    assert body["platforms"]["finch"]["mandatory_for_track"] is True
+    assert body["platforms"]["agent37"]["mandatory_for_track"] is False
+    # Ensure secret keys are never leaked in status response
+    raw_text = status_resp.text.lower()
+    assert "sk_live_" not in raw_text
+
+    finch_chk = client.post("/integrations/check/finch")
+    assert finch_chk.status_code == 200
+    assert finch_chk.json()["last_check_status"] == "ready"
+
+    assert client.post("/integrations/check/unknown_platform").status_code == 404
+
+    monkeypatch.setenv("BAND_AGENT_ID", "band-id-test")
+    monkeypatch.setenv("BAND_API_KEY", "band-key-test")
+    mock_rest = MagicMock = AsyncMock()
+    mock_rest.agent_api_identity.get_agent_me = AsyncMock(
+        return_value=SimpleNamespace(
+            data=SimpleNamespace(id="band-id-test", handle="intelliscope-collector", name="Collector")
+        )
+    )
+    with patch("backend.integrations.band_adapter.AsyncRestClient", return_value=mock_rest):
+        chk = client.post("/integrations/check/band")
+        assert chk.status_code == 200
+        assert chk.json()["last_check_status"] == "connected"
+
+    # Validation check -> 422 for unknown target platform or empty action
+    bad_del = client.post(
+        "/integrations/delegate",
+        json={"target_platform": "invalid_platform", "action": "test"},
+    )
+    assert bad_del.status_code == 422
+
+    # Valid delegation via BAND prepare_peer_handoff records telemetry
+    good_del = client.post(
+        "/integrations/delegate",
+        json={
+            "execution_id": "exec-api-del-1",
+            "target_platform": "band",
+            "action": "prepare_peer_handoff",
+            "payload": {
+                "peer_handle": "@analyst-peer",
+                "query": "quantum computing",
+                "source_urls": ["https://arxiv.org/abs/2401.12345v1"],
+            },
+        },
+    )
+    assert good_del.status_code == 200
+    del_data = good_del.json()
+    assert del_data["status"] == "completed"
+    assert del_data["output_valid"] is True
+
+    after_status = client.get("/integrations/status").json()
+    assert len(after_status["recent_delegations"]) == 1
+    assert after_status["recent_delegations"][0]["execution_id"] == "exec-api-del-1"
+
+    integration_registry.clear_delegations()
+
+
+def test_cors_configuration_and_headers():
+    """Verify CORS headers respond to browser origins correctly."""
+    resp = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") in ("*", "http://localhost:5173")
+
+
+
+
+
 
 

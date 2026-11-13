@@ -25,6 +25,7 @@ from scripts.band_collector_agent import (
     format_research_reply,
     format_usage_reply,
     load_band_credentials,
+    parse_research_command,
     parse_research_request,
     send_band_reply,
 )
@@ -1314,6 +1315,278 @@ class TestPhase34BandDashboardConsistency:
         assert match is not None
         dash_json = _json.loads(match.group(1))
         assert dash_json["themes"] == []
+
+
+class TestPhase4BandMultiSource:
+    """Phase 4 tests for optional BAND source parsing and multi-source reply formatting."""
+
+    def test_parse_research_command_default_and_explicit_sources(self):
+        # Default omission stays ['wikipedia'] and preserves DEFAULT_SEARCH_LIMIT (3)
+        q, limit, sources = parse_research_command("@IntelliScope Collector Research quantum computing")
+        assert (q, limit, sources) == ("quantum computing", 3, ["wikipedia"])
+
+        # Legitimate query containing source names without explicit modifier must remain intact
+        q2, limit2, sources2 = parse_research_command("@IntelliScope Collector Operations research")
+        assert (q2, limit2, sources2) == ("Operations research", 3, ["wikipedia"])
+
+        q_w, _, s_w = parse_research_command("@IntelliScope Collector Research Wikipedia governance")
+        assert q_w == "Wikipedia governance"
+        assert s_w == ["wikipedia"]
+
+        # Explicit forms
+        assert parse_research_command(
+            "@IntelliScope Collector Research quantum computing sources=arxiv,crossref"
+        ) == ("quantum computing", 3, ["arxiv", "crossref"])
+
+        assert parse_research_command(
+            "@IntelliScope Collector Research quantum computing (sources: wikipedia, arxiv)"
+        ) == ("quantum computing", 3, ["wikipedia", "arxiv"])
+
+        assert parse_research_command(
+            "@IntelliScope Collector Research quantum computing [arxiv, crossref] limit=6"
+        ) == ("quantum computing", 6, ["arxiv", "crossref"])
+
+        assert parse_research_command(
+            "@IntelliScope Collector Research quantum computing sources=all"
+        ) == ("quantum computing", 3, ["wikipedia", "arxiv", "crossref"])
+
+        assert parse_research_command(
+            "@IntelliScope Collector Research quantum computing from arxiv and crossref"
+        ) == ("quantum computing", 3, ["arxiv", "crossref"])
+
+    @pytest.mark.asyncio
+    async def test_on_message_forwards_explicit_sources_to_pipeline(self):
+        adapter = BandDataCollectorAdapter(
+            backend_url="http://127.0.0.1:8010",
+            agent_handle="intelliscope-collector",
+            agent_name="IntelliScope Collector",
+        )
+        fake_tools = FakeAgentTools()
+        msg = PlatformMessage(
+            id="msg-p4-1",
+            room_id="room-test-p4",
+            sender_id="user-1",
+            sender_type="user",
+            sender_name="Researcher",
+            message_type="chat",
+            content="@IntelliScope Collector Research quantum computing sources=arxiv,crossref",
+            created_at=datetime.now(timezone.utc),
+            metadata={"mentions": [{"name": "IntelliScope Collector"}]},
+        )
+
+        with patch(
+            "scripts.band_collector_agent.call_pipeline_api",
+            new_callable=AsyncMock,
+            return_value=(
+                True,
+                {
+                    "status": "success",
+                    "query": "quantum computing",
+                    "total_duration_ms": 50.0,
+                    "summary": "Summary",
+                    "agent_statuses": {},
+                    "research": {"result_count": 0, "results": [], "sources_requested": ["arxiv", "crossref"]},
+                    "verification": {},
+                    "analysis": {},
+                    "dashboard": {},
+                },
+            ),
+        ) as mock_pipeline:
+            await adapter.on_message(
+                msg,
+                fake_tools,
+                [],
+                None,
+                None,
+                is_session_bootstrap=False,
+                room_id="room-test-p4",
+            )
+            mock_pipeline.assert_called_once_with(
+                query="quantum computing",
+                limit=3,
+                backend_url="http://127.0.0.1:8010",
+                sources=["arxiv", "crossref"],
+            )
+            assert len(fake_tools.messages_sent) == 1
+
+    def test_format_pipeline_reply_multi_source_metadata_and_partial_errors(self):
+        import json as _json
+        import re as _re
+
+        payload = {
+            "pipeline_id": "pipe-p4-1",
+            "query": "quantum computing",
+            "status": "success",
+            "total_duration_ms": 140.0,
+            "summary": "Synthesized across Wikipedia and arXiv.",
+            "agent_statuses": {},
+            "research": {
+                "result_count": 2,
+                "sources_requested": ["wikipedia", "arxiv", "crossref"],
+                "source_breakdown": {"wikipedia": 1, "arxiv": 1},
+                "source_errors": {"crossref": "Crossref API rate limit exceeded (HTTP 429)."},
+                "results": [
+                    {
+                        "title": "Fault-Tolerant Quantum Codes",
+                        "snippet": "Logical surface codes.",
+                        "source_name": "arxiv",
+                        "source_type": "arxiv_paper",
+                        "source_url": "https://arxiv.org/abs/2401.12345v1",
+                        "publication_date": "2024-01-22",
+                        "doi": "10.1103/PhysRevLett.132.010501",
+                        "authors": ["Alice Smith", "Bob Chen"],
+                    }
+                ],
+            },
+            "verification": {
+                "quality_score": 100.0,
+                "structurally_valid_count": 2,
+                "excluded_count": 0,
+                "directly_relevant_count": 2,
+                "weakly_relevant_count": 0,
+                "is_factually_verified": False,
+            },
+            "analysis": {
+                "topic": "quantum computing",
+                "key_themes": [],
+                "source_distribution": {"wikipedia": 1, "arxiv": 1},
+                "evidence_backed_observations": [
+                    {
+                        "statement": "According to 'Fault-Tolerant Quantum Codes': Logical surface codes.",
+                        "source_title": "Fault-Tolerant Quantum Codes",
+                        "source_url": "https://arxiv.org/abs/2401.12345v1",
+                        "source_name": "arxiv",
+                        "source_type": "arxiv_paper",
+                        "publication_date": "2024-01-22",
+                        "doi": "10.1103/PhysRevLett.132.010501",
+                        "authors": ["Alice Smith", "Bob Chen"],
+                        "confidence": "high",
+                        "confidence_reason": "Direct relevance.",
+                    }
+                ],
+            },
+            "dashboard": {
+                "dashboard_id": "dash-p4-1",
+                "topic": "quantum computing",
+                "title": "Dashboard",
+                "kpi_cards": [],
+                "source_distribution": {"wikipedia": 1, "arxiv": 1},
+                "themes": [],
+                "charts": [],
+                "metadata": {"sources_represented": ["wikipedia", "arxiv"]},
+            },
+        }
+
+        reply = format_pipeline_reply(payload, "quantum computing")
+        assert "Sources Queried" in reply
+        assert "**wikipedia:** 1" in reply
+        assert "**arxiv:** 1" in reply
+        assert "Partial Source Notices" in reply
+        assert "HTTP 429" in reply
+        assert "Authors: Alice Smith, Bob Chen" in reply
+        assert "Published: 2024-01-22" in reply
+        assert "DOI: `10.1103/PhysRevLett.132.010501`" in reply
+
+        match = _re.search(r"```json\n(.*?)\n```", reply, flags=_re.DOTALL)
+        assert match is not None
+        dash_json = _json.loads(match.group(1))
+        assert dash_json["source_distribution"] == {"wikipedia": 1, "arxiv": 1}
+
+
+class TestPhase5BandInteroperabilityAudit:
+    """Phase 5 tests covering BAND lifecycle hooks, events, peer delegation, and retries."""
+
+    @pytest.mark.asyncio
+    async def test_band_adapter_lifecycle_events_and_peer_delegation(self, sample_pipeline_response):
+        from types import SimpleNamespace
+        from scripts.band_collector_agent import extract_delegation_target, lookup_available_peers
+
+        cleaned, target = extract_delegation_target(
+            "@IntelliScope Collector Research quantum computing delegate=@analyst-peer"
+        )
+        assert target == "analyst-peer"
+        assert "delegate=" not in cleaned
+
+        adapter = BandDataCollectorAdapter(backend_url="http://127.0.0.1:8010")
+        await adapter.on_started("IntelliScope Collector", "Research Collector")
+        assert adapter.started is True
+
+        tools = FakeAgentTools()
+        tools.lookup_peers = AsyncMock(
+            return_value=SimpleNamespace(
+                data=[SimpleNamespace(id="p-1", name="Analyst Peer", handle="analyst-peer")]
+            )
+        )
+        peers = await lookup_available_peers(tools)
+        assert len(peers) == 1 and peers[0]["handle"] == "analyst-peer"
+
+        msg = PlatformMessage(
+            id="msg-p5-1",
+            room_id="room-p5",
+            sender_id="user-1",
+            sender_type="user",
+            sender_name="Alice",
+            message_type="chat",
+            content="@IntelliScope Collector Research Artificial intelligence delegate=@analyst-peer",
+            created_at=datetime.now(timezone.utc),
+            metadata={"mentions": [{"name": "IntelliScope Collector"}]},
+        )
+
+        enriched_response = {
+            **sample_pipeline_response,
+            "execution_id": "exec-band-p5-1234",
+            "handoffs": [{"handoff_id": "h1"}],
+        }
+        with patch(
+            "scripts.band_collector_agent.call_pipeline_api",
+            new_callable=AsyncMock,
+            return_value=(True, enriched_response),
+        ):
+            await adapter.on_message(
+                msg,
+                tools,
+                [],
+                None,
+                None,
+                is_session_bootstrap=False,
+                room_id="room-p5",
+            )
+
+        # Primary reply sent + send_notice A2A handoff posted + task/result/delegation events emitted
+        assert len(tools.messages_sent) >= 1
+        assert any("@analyst-peer" in m["content"] for m in tools.messages_sent)
+        assert any(e["message_type"] == "task" for e in tools.events_sent)
+        assert any(e["message_type"] == "tool_result" for e in tools.events_sent)
+
+        await adapter.on_interrupt("interrupt", "cancelled")
+        assert adapter.interrupt_count == 1
+        await adapter.on_cleanup("room-p5")
+        assert "room-p5" not in adapter.active_rooms
+
+    @pytest.mark.asyncio
+    async def test_call_pipeline_api_retry_recovery_and_agent_session_config(self, sample_pipeline_response):
+        attempts = {"count": 0}
+
+        async def mock_post(url, json=None, timeout=None):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                return httpx.Response(503, text="Backend busy", request=httpx.Request("POST", url))
+            return httpx.Response(200, json=sample_pipeline_response, request=httpx.Request("POST", url))
+
+        with patch.object(httpx.AsyncClient, "post", side_effect=mock_post):
+            ok, data = await call_pipeline_api(
+                query="Artificial intelligence",
+                limit=3,
+                max_retries=1,
+            )
+        assert ok is True
+        assert attempts["count"] == 2
+        assert data["pipeline_id"] == "pipe-test-1234"
+
+        agent = create_band_collector_agent(agent_id="test-id", api_key="test-key")
+        assert agent.runtime is not None
+
+
 
 
 

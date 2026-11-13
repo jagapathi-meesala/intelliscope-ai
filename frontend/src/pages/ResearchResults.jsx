@@ -22,6 +22,8 @@ export default function ResearchResults() {
   const research = currentPipeline?.research;
   const results = research?.results || [];
   const query = currentPipeline?.query || research?.query;
+  const sourceBreakdown = research?.source_breakdown || {};
+  const sourceErrors = research?.source_errors || {};
 
   if (!results || results.length === 0) {
     return (
@@ -29,15 +31,15 @@ export default function ResearchResults() {
         <div>
           <h2 className="text-2xl font-bold text-white tracking-tight mb-1">Research Sources & Evidence</h2>
           <p className="text-sm text-slate-400">
-            Raw and structured data gathered by the Data Collector Agent via the MediaWiki API.
+            Normalized research records retrieved across Wikipedia, arXiv, and Crossref.
           </p>
         </div>
         <EmptyState
           title="No Research Results Found"
           description={
             query
-              ? `No encyclopedia records were found for query "${query}". Try broadening your topic or using synonyms.`
-              : 'Execute an autonomous research query to populate verified sources and extracts.'
+              ? `No verifiable records were found for query "${query}". Try broadening your topic or selecting additional sources.`
+              : 'Execute an autonomous research query to populate verified sources and abstracts.'
           }
           actionText="Execute Research Query"
           actionTo="/new-research"
@@ -52,13 +54,21 @@ export default function ResearchResults() {
       {/* Header & Meta */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="text-xs font-mono uppercase px-2 py-0.5 rounded bg-brand-950 text-brand-300 border border-brand-800/40">
               Data Collector Agent
             </span>
             <span className="text-xs text-slate-500 font-mono">
               {results.length} {results.length === 1 ? 'record' : 'records'} retrieved
             </span>
+            {Object.entries(sourceBreakdown).map(([src, cnt]) => (
+              <span
+                key={src}
+                className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-navy-950 text-cyan-300 border border-cyan-800/40"
+              >
+                {src}: {cnt}
+              </span>
+            ))}
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">
             Research Sources: "{query}"
@@ -82,11 +92,33 @@ export default function ResearchResults() {
         </div>
       </div>
 
+      {/* Partial Source Errors Banner if applicable */}
+      {Object.keys(sourceErrors).length > 0 && (
+        <div className="p-4 rounded-xl border border-amber-800/60 bg-amber-950/30 text-amber-200 text-xs space-y-1">
+          <div className="font-bold flex items-center gap-1.5 text-amber-300">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Partial Source Provider Notices</span>
+          </div>
+          {Object.entries(sourceErrors).map(([src, err]) => (
+            <p key={src} className="font-mono text-amber-200/90">
+              • <strong>{src}:</strong> {err}
+            </p>
+          ))}
+        </div>
+      )}
+
       {/* Results List */}
       <div className="space-y-4">
         {results.map((item, idx) => {
           const isWeak = item.is_weakly_relevant || item.relevance === 'weakly_relevant';
-          const isExtract = item.source_type === 'wikipedia_extract';
+          const sourceName = (item.source_name || 'wikipedia').toLowerCase();
+          const provenanceLabel =
+            item.source_type === 'wikipedia_extract'
+              ? 'page extract'
+              : item.source_type === 'wikipedia_search_snippet'
+              ? 'search snippet'
+              : item.source_type || 'abstract';
+          const authorsList = Array.isArray(item.authors) ? item.authors : [];
 
           return (
             <div
@@ -105,13 +137,40 @@ export default function ResearchResults() {
                     </h3>
                   </div>
 
-                  <div className="pl-7">
+                  <div className="pl-7 space-y-1">
                     <SafeExternalLink href={item.source_url || item.source} maxLength={75} />
+                    {(authorsList.length > 0 || item.publication_date || item.doi) && (
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                        {authorsList.length > 0 && (
+                          <span>
+                            <strong className="text-slate-300">Authors:</strong>{' '}
+                            {authorsList.slice(0, 4).join(', ')}
+                            {authorsList.length > 4 ? ' et al.' : ''}
+                          </span>
+                        )}
+                        {item.publication_date && (
+                          <span className="font-mono">
+                            <strong className="text-slate-300 font-sans">Published:</strong>{' '}
+                            {item.publication_date}
+                          </span>
+                        )}
+                        {item.doi && (
+                          <span className="font-mono text-cyan-300">
+                            DOI: {item.doi}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Relevance & Provenance Badges */}
+                {/* Provider, Relevance & Provenance Badges */}
                 <div className="flex flex-wrap items-center gap-2 sm:self-start">
+                  {/* Provider pill */}
+                  <span className="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/50">
+                    {sourceName}
+                  </span>
+
                   {/* Relevance pill */}
                   <span
                     className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${
@@ -130,22 +189,16 @@ export default function ResearchResults() {
                   </span>
 
                   {/* Provenance badge */}
-                  <span
-                    className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded border ${
-                      isExtract
-                        ? 'bg-cyan-950/50 text-cyan-300 border-cyan-800/50'
-                        : 'bg-navy-950 text-slate-400 border-slate-800'
-                    }`}
-                  >
+                  <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded border bg-cyan-950/50 text-cyan-300 border-cyan-800/50">
                     <BookOpen className="w-3 h-3" />
-                    <span>{isExtract ? 'page extract' : 'search snippet'}</span>
+                    <span>{provenanceLabel}</span>
                   </span>
                 </div>
               </div>
 
-              {/* Substantive Extract Snippet */}
+              {/* Substantive Extract / Abstract */}
               <div className="pl-7 text-sm text-slate-300 leading-relaxed bg-navy-950/50 p-3.5 rounded-xl border border-slate-800/80">
-                {item.snippet}
+                {item.abstract || item.snippet}
               </div>
 
               {/* Relevance Reason & Retrieval Timestamp Footer */}

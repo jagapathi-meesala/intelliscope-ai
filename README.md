@@ -9,10 +9,13 @@ Research — Data & Build
 
 ## Agents
 
-1. **Data Collector Agent** (Operational) — Asynchronously collects research from external sources (e.g., Wikipedia MediaWiki API) with input validation, content cleaning, and structured metadata.
-2. **Research Verification Agent** (Operational) — Validates structural integrity, HTTPS protocol compliance, domain whitelist adherence, deduplication, and timestamps of research results. Computes transparent quality scores while explicitly distinguishing structural validity from factual accuracy.
-3. **Insight Analyst Agent** (Operational) — Performs explainable, deterministic text analysis, keyword extraction, and theme clustering strictly on verified evidence. Grounds all observations in supporting source URLs and discloses information gaps and methodology limitations without hallucination or LLM extrapolation.
-4. **Dashboard Builder Agent** (Operational) — Converts the Insight Analyst Agent's structured output into a safe, validated dashboard specification JSON containing executive summaries, KPI metric cards, thematic clusters, evidence citations, and chart specifications suitable for frontend rendering without executing unsafe code.
+1. **Data Collector Agent** (Operational) — Asynchronously collects research from configurable external sources via modular clients in `backend/services/sources/`:
+   - **Wikipedia** (`https://en.wikipedia.org/w/api.php`) — Default source; introductory extracts and sanitized search snippets.
+   - **arXiv** (`https://export.arxiv.org/api/query`) — Academic preprints with Atom XML parsing, abstracts, authors, publication dates, and optional DOIs.
+   - **Crossref** (`https://api.crossref.org/works`) — Scholarly publication metadata with DOIs, authors, publication dates, and JATS-cleaned abstracts or honest metadata fallbacks.
+2. **Research Verification Agent** (Operational) — Validates structural integrity, HTTPS protocol compliance, source-aware domain whitelists (`*.wikipedia.org`, `arxiv.org`, `doi.org`), DOI syntax & cross-batch DOI deduplication, URL/title deduplication, and ISO timestamps. Computes transparent quality scores while explicitly distinguishing structural validity from factual accuracy.
+3. **Insight Analyst Agent** (Operational) — Performs explainable, deterministic text analysis, keyword extraction, source-modality breakdown (`source_distribution`), and theme clustering strictly on verified evidence. Grounds all observations with source provenance (`source_name`, `source_type`, `publication_date`, `doi`, `authors`) and discloses partial source errors, information gaps, and methodology limitations without hallucination or LLM extrapolation.
+4. **Dashboard Builder Agent** (Operational) — Converts the Insight Analyst Agent's structured output into a safe, validated dashboard specification JSON containing executive summaries, KPI metric cards, thematic clusters, source-distribution charts (`chart-source-distribution`), evidence citations, and chart specifications suitable for frontend rendering without executing unsafe code.
 
 ## Technology Stack
 
@@ -31,15 +34,15 @@ Research — Data & Build
 ## Core Features
 
 - Multi-agent collaboration & pipeline orchestration
-- Asynchronous research data collection
-- Source verification & structural integrity checking
-- Deduplication & domain whitelist enforcement
+- Multi-source asynchronous research collection (Wikipedia, arXiv, Crossref) with unified record normalization & round-robin balancing
+- Graceful partial-source degradation (`source_errors`) and explicit rate-limit / timeout diagnostics
+- Source verification, structural integrity checking, and DOI validation / deduplication
+- Domain whitelist enforcement per provider (`wikipedia`, `arxiv`, `crossref`)
 - Transparent quality scoring (0–100)
 - Deterministic text analysis & theme clustering
-- Evidence-backed observation grounding
+- Evidence-backed observation grounding with academic provenance
 - Declarative, safe dashboard specification generation
-- Interactive KPI cards & visual chart specifications
-- Research report generation
+- Interactive React dashboard with provider selection, KPIs, and chart visualizations
 
 ## Setup & Installation
 
@@ -86,6 +89,17 @@ For verbose output:
 
 ```bash
 pytest -v
+```
+
+### 5. Running & Testing the React Frontend
+
+Inside `frontend/` (assuming dependencies are already installed):
+
+```bash
+cd frontend
+npm test
+npm run build
+npm run dev
 ```
 
 ---
@@ -199,19 +213,21 @@ curl -X GET http://localhost:8010/agents/status
 ### 3. Research Collection
 
 #### `POST /research`
-Invokes the **Data Collector Agent** to perform asynchronous search retrieval via the MediaWiki API.
+Invokes the **Data Collector Agent** to perform asynchronous multi-source retrieval across selected providers (`wikipedia`, `arxiv`, `crossref`).
 
 **Request Body Constraints:**
 - `query` (string, required): 1 to 300 characters, cannot be empty or pure whitespace.
 - `limit` (integer, optional): Number of results to retrieve (1 to 10, default: 5).
+- `sources` (array of strings, optional): Ordered unique list of providers from `["wikipedia", "arxiv", "crossref"]` (default: `["wikipedia"]` for full backward compatibility).
 
 **Example Request:**
 ```bash
 curl -X POST http://localhost:8010/research \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "Artificial Intelligence",
-    "limit": 2
+    "query": "Quantum Computing",
+    "limit": 3,
+    "sources": ["wikipedia", "arxiv", "crossref"]
   }'
 ```
 
@@ -220,34 +236,54 @@ curl -X POST http://localhost:8010/research \
 {
   "agent": "Data Collector Agent",
   "agent_name": "Data Collector Agent",
-  "query": "Artificial Intelligence",
-  "result_count": 2,
-  "total_results": 2,
-  "retrieved_at": "2026-11-04T18:15:00.000000+00:00",
+  "query": "Quantum Computing",
+  "result_count": 3,
+  "total_results": 3,
+  "sources_requested": ["wikipedia", "arxiv", "crossref"],
+  "source_breakdown": {
+    "wikipedia": 1,
+    "arxiv": 1,
+    "crossref": 1
+  },
+  "source_errors": {},
+  "retrieved_at": "2026-11-11T18:15:00.000000+00:00",
   "results": [
     {
-      "title": "Artificial intelligence",
-      "snippet": "Artificial intelligence (AI) is the intelligence of machines or software, as opposed to the intelligence of living beings, primarily of humans.",
-      "source_url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
-      "source": "https://en.wikipedia.org/wiki/Artificial_intelligence",
-      "retrieved_at": "2026-11-04T18:15:00.000000+00:00"
+      "title": "Quantum computing",
+      "snippet": "Quantum computing is a computer that exploits quantum mechanical phenomena.",
+      "abstract": "Quantum computing is a computer that exploits quantum mechanical phenomena.",
+      "source_name": "wikipedia",
+      "source_url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "source": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "publication_date": null,
+      "doi": null,
+      "authors": [],
+      "source_type": "wikipedia_extract",
+      "retrieved_at": "2026-11-11T18:15:00.000000+00:00"
     },
     {
-      "title": "Artificial general intelligence",
-      "snippet": "Artificial general intelligence (AGI) is a type of artificial intelligence that can perform most economically valuable tasks at least as well as a human.",
-      "source_url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
-      "source": "https://en.wikipedia.org/wiki/Artificial_general_intelligence",
-      "retrieved_at": "2026-11-04T18:15:00.000000+00:00"
+      "title": "Fault-Tolerant Quantum Surface Codes",
+      "snippet": "Analysis of threshold behavior in scalable topological qubit lattices.",
+      "abstract": "Analysis of threshold behavior in scalable topological qubit lattices.",
+      "source_name": "arxiv",
+      "source_url": "https://arxiv.org/abs/2401.12345v1",
+      "source": "https://arxiv.org/abs/2401.12345v1",
+      "publication_date": "2024-01-22",
+      "doi": "10.1103/PhysRevLett.132.010501",
+      "authors": ["Alice Smith", "Bob Chen"],
+      "source_type": "arxiv_paper",
+      "retrieved_at": "2026-11-11T18:15:00.000000+00:00"
     }
   ]
 }
 ```
 
 #### Status Codes & Error Handling:
-- `200 OK`: Successful retrieval (including queries yielding zero results).
-- `422 Unprocessable Entity`: Input validation failure (e.g., query > 300 characters, limit out of range 1–10, empty query).
-- `502 Bad Gateway`: Upstream API service failure, connection error, or invalid upstream response.
-- `504 Gateway Timeout`: Upstream MediaWiki API request timed out.
+- `200 OK`: Successful retrieval (including queries yielding zero results, or multi-source partial failures where healthy sources still succeeded and failing providers appear in `source_errors`).
+- `422 Unprocessable Entity`: Input validation failure (e.g., unsupported source name, query > 300 characters, limit out of range 1–10, empty query).
+- `429 Too Many Requests`: Rate limiting enforced by all selected external providers.
+- `502 Bad Gateway`: Upstream API service failure, connection error, or invalid XML/JSON upstream response across all selected providers.
+- `504 Gateway Timeout`: Upstream API request timed out across all selected providers.
 
 ---
 
@@ -259,7 +295,8 @@ Invokes the **Research Verification Agent** to validate the output produced by t
 The verification process evaluates:
 - Non-empty titles and snippets
 - Secure HTTPS source URLs
-- Allowed source domain whitelist (initially Wikipedia: `*.wikipedia.org`)
+- Allowed source domain whitelist per provider (Wikipedia: `*.wikipedia.org`; arXiv: `arxiv.org` / `export.arxiv.org`; Crossref: `doi.org` / `dx.doi.org`)
+- DOI syntax validation (`10.xxxx/...`) and duplicate DOI detection across records
 - Duplicate URLs and duplicate titles across the batch
 - Valid ISO 8601 retrieval timestamps
 - Missing or malformed data fields
@@ -634,10 +671,13 @@ Executes the unified, end-to-end 4-agent intelligence workflow sequentially with
 - Zero data fabrication guarantee: if external research yields no records, the pipeline completes transparently with zero-count KPIs and explanations.
 
 **Request Body (`PipelineRequest`):**
+- `sources` (optional): list of providers from `["wikipedia", "arxiv", "crossref"]` (defaults to `["wikipedia"]`).
+
 ```json
 {
   "query": "Quantum Computing",
-  "limit": 3
+  "limit": 3,
+  "sources": ["wikipedia", "arxiv", "crossref"]
 }
 ```
 
@@ -840,14 +880,17 @@ python scripts/band_collector_agent.py
 ### Supported Interaction Syntax
 
 In any BAND room where the agent is a participant, mention the agent to trigger deterministic research across all 4 agents:
-- `@IntelliScope Collector Research quantum computing`
+- `@IntelliScope Collector Research quantum computing` *(defaults to `wikipedia`)*
+- `@IntelliScope Collector Research quantum computing sources=arxiv,crossref`
+- `@IntelliScope Collector Research quantum computing (sources: wikipedia, arxiv)`
+- `@IntelliScope Collector Research quantum computing [arxiv, crossref] limit=6`
+- `@IntelliScope Collector Research quantum computing sources=all`
+- `@IntelliScope Collector Research quantum computing from arxiv and crossref`
 - `@DataCollector research Artificial intelligence`
-- `@DataCollector research Quantum computing limit=5`
 - `/intelliscope-collector Research quantum computing`
-- `@DataCollector search: Renewable energy`
 - `@DataCollector find: Graph theory (limit: 4)`
 
-The agent extracts the original user query, sanitizes platform mentions, handles, and leading action instructions (e.g. converting `'@IntelliScope Collector Research quantum computing'` or `'/intelliscope-collector Research quantum computing'` cleanly to `'quantum computing'`), executes the unified pipeline (`POST /pipeline`), synthesizes verified Wikipedia results, constructs a validated dashboard specification JSON, and posts the complete executive intelligence brief directly into the room mentioning the requester.
+The agent extracts the original user query and optional source list, sanitizes platform mentions, handles, and leading action instructions (e.g. converting `'@IntelliScope Collector Research quantum computing'` or `'/intelliscope-collector Research quantum computing'` cleanly to `'quantum computing'`), executes the unified pipeline (`POST /pipeline`), synthesizes verified multi-source results (with provider breakdown, publication dates, authors, DOIs, and partial error notices when applicable), constructs a validated dashboard specification JSON, and posts the complete executive intelligence brief directly into the room mentioning the requester.
 
 ### Robust BAND Message Sanitization
 
@@ -855,8 +898,43 @@ The BAND agent runtime (`scripts/band_collector_agent.py`) implements sanitized 
 - **Multi-Word Display Names**: Strips display name mentions like `@IntelliScope Collector` and `@Data Collector Agent`.
 - **Command & Path Handles**: Strips leading command slugs (`/intelliscope-collector`) and path handles (`@owner/handle`, `@/handle`, `@handle`).
 - **Normalized Platform Tokens**: Resolves stored `@[[uuid]]` and `<@uuid>` mention metadata.
+- **Explicit Source Modifier Extraction**: Parses optional explicit source selection modifiers while keeping source names in ordinary prose queries untouched (e.g., `Wikipedia history` or `Operations research`).
 - **Action Instruction Stripping**: Strips single leading action verbs (`Research <topic>`, `search for <topic>`, `find <topic>`) into clean topic strings without stripping legitimate topic vocabulary (e.g. `Operations research`, `Search algorithms`, `Market research` remain completely intact).
 - **Safe Sanitized Logging**: Logs sanitized topic queries without printing credentials, API keys, or sensitive auth headers.
+
+### Multi-Source Architecture & Current Limitations
+
+- **Supported Sources**: Wikipedia (`wikipedia`), arXiv preprints (`arxiv`), and Crossref publication metadata (`crossref`). All three clients use asynchronous `httpx` requests without requiring paid API keys.
+- **Metadata Completeness**: arXiv entries carry optional `arxiv:doi` elements (`null` when absent). Crossref works frequently omit open `abstract` text; when unavailable, IntelliScope AI records a transparent metadata fallback noting journal and DOI instead of fabricating abstract prose.
+- **API Rate Limits & Timeouts**: Public arXiv and Crossref endpoints enforce rate limits (`HTTP 429`) and occasional latency spikes. When querying multiple sources, partial provider failures are isolated and surfaced in `source_errors` while healthy provider results complete the pipeline.
+- **Structural vs. Factual Verification**: Verification confirms HTTPS URLs, allowed provider domains, valid DOI format (`10.xxxx/...`), timestamps, and batch deduplication — peer-reviewed empirical fact-checking remains out of scope.
+
+---
+
+## Sponsor Platform Interoperability & Actual Integration Status (Diwali Festiverse Audit)
+
+**Selected Track:** **Research — Data & Build** (Data Agent gathers & normalizes multi-source web data → Builder Agent compiles evidence-backed dashboards/widgets).
+
+Per official Diwali Festiverse requirements for **Research — Data & Build**:
+- **Mandatory Sponsors:** **BAND**, **Lyzr**, **AdaL**, and **Finch**
+- **Optional Sponsor (Deployment/Credits Prize Track):** **Agent37**
+
+IntelliScope AI implements modular, environment-configured sponsor adapters in `backend/integrations/`, official MCP / Skill / SDK artifacts, shared execution context (`ExecutionContext`), correlation IDs (`execution_id`), per-step timeouts (`PIPELINE_STEP_TIMEOUT_SECONDS`), and structured inter-agent handoffs (`AgentHandoffRecord`).
+
+| Platform | Track Role | Status | Runtime State | What Is Actually Implemented & Observed | Remaining Prerequisites for Live E2E |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **BAND (`band.ai`)** | **Mandatory** | **LIVE TESTED** | `ready` (`agent_config.yaml`) | Official `band-sdk==6.0.1` `SimpleAdapter` runtime (`scripts/band_collector_agent.py`), WS `SUPERSEDE` reconnect + `HeartbeatWatchdog`, lifecycle hooks, `@peer` A2A delegation (`delegate=@<handle>`), and live REST checks (`get_agent_me` 200 OK `@baboiiibabu/intelliscope-collector`, room `c348c418-f3a6-467d-8601-c7453bec68e1`, 10 historical User→Agent exchanges observed). Live user prompt for 'neural networks' received and 4-agent pipeline execution `221041b0` delivered back to room verified. | Live room communication verified with running host collector; automated test available via `scripts/live_band_room_test.py`. |
+| **Finch (`finchwork.net`)** | **Mandatory** | **IMPLEMENTED** | `ready` (local MCP) | Official MCP JSON-RPC 2.0 `stdio` server (`scripts/intelliscope_mcp_server.py`) supporting newline + `Content-Length` framing (`intelliscope_research`, `intelliscope_verify`, `intelliscope_pipeline`, `intelliscope_integrations_status`), `integrations/finch/mcp_servers.json`, and `integrations/finch/SKILL.md`. Protocol handshake & subprocess framing tested locally (`passed`). | Launch Finch Desktop GUI with `integrations/finch/mcp_servers.json` registered for a live desktop turn. |
+| **Lyzr (`lyzr.ai`)** | **Mandatory** | **PARTIAL** | `unconfigured` (missing env vars) | Modular `LyzrAdapter` (`backend/integrations/lyzr_adapter.py`) for `POST /v3/inference/chat/` and `POST /v3/workflows/{flow_id}/execute` (`x-api-key`, `session_id=execution_id`, retries, redaction, schema validation) plus opt-in `PipelineRequest.delegate_to_lyzr` / `LYZR_ENABLE_PIPELINE_DELEGATION` pipeline handoff (`insight_analyst → lyzr_studio`). Tested with HTTPX mocks. | Supply `LYZR_API_KEY` and `LYZR_AGENT_ID` / `LYZR_WORKFLOW_ID` in `.env` and run live inference verification. |
+| **AdaL (`adal.sylph.ai`)** | **Mandatory** | **PARTIAL** | `not_installed` | Official project AdaL Skill (`.atskills/intelliscope-research/SKILL.md` for `@skills:intelliscope-research`) plus `AdalAdapter` (`backend/integrations/adal_adapter.py`) supporting `adal -q <prompt> -o json --workspace ... --enabled-default-tools Read,Search` and `adal_agent_sdk` (`AdalAgentOptions`, `query()`), tested with mocks. | Install `adal` CLI (`curl -fsSL https://adal.sylph.ai/install.sh | bash`) or `adal-sdk`, authenticate, and set `ADAL_ENABLED=true`. |
+| **Agent37 (`agent37.com`)** | **Optional** | **PARTIAL** | `unconfigured` (missing env vars) | Modular `Agent37Adapter` (`backend/integrations/agent37_adapter.py`) implementing `X-Agent37-Key` auth, `/v1/health` checks, and bounded `POST /v1/instances/{id}/exec` calls, tested with HTTPX mocks. | Supply `AGENT37_API_KEY` and `AGENT37_INSTANCE_ID` if deploying to an Agent37 cloud sandbox later. |
+
+### Phase 5 Interoperability & Telemetry Endpoints
+- `GET /integrations/status` — Returns honest status categories (`live_tested`, `implemented`, `partial`, `not_integrated`), `mandatory_for_track` flags, runtime states, boolean `credentials_present` flags (secrets never exposed), and recent delegation telemetry.
+- `POST /integrations/check/{platform_id}` — Triggers a non-mutating health or runtime/MCP handshake probe for one platform adapter.
+- `POST /integrations/delegate` — Validates and dispatches structured task delegation requests (`DelegationTaskRequest` → `DelegationTaskResult`) with timeout and retry guarantees.
+- **Finch MCP Server (`stdio`)**: `.venv/bin/python scripts/intelliscope_mcp_server.py` (configured via `integrations/finch/mcp_servers.json`).
+- **BAND Peer Delegation Command Example**: Mention `@IntelliScope Collector Research quantum computing delegate=@analyst-peer` in a BAND room to execute the 4-agent pipeline and hand off grounded `https://` provenance URLs via `@analyst-peer` with an `intelliscope.a2a.v1` JSON payload.
 
 ---
 
@@ -885,6 +963,18 @@ The BAND agent runtime (`scripts/band_collector_agent.py`) implements sanitized 
   - Recharts integration supporting vertical bar charts, horizontal bar charts, and pie charts with heuristic labeling.
   - Session and local state preservation across sidebar navigation plus historical run switching.
   - 9 frontend automated tests (`npm test` in `frontend/`) and production build passing (`npm run build`).
+- **Phase 4 / 4.5: Multi-Source Integration & Live Validation**: Complete:
+  - Added modular `arXiv` (`backend/services/sources/arxiv_client.py`) and `Crossref` (`backend/services/sources/crossref_client.py`) source clients alongside `Wikipedia`, unified record normalization, source-aware verification (domains + DOI syntax/deduplication), multi-source analyst & dashboard charts, and BAND/React source selection.
+  - Verified live HTTP integration across Wikipedia, arXiv, Crossref, and combined 4-agent pipeline via opt-in `scripts/live_multisource_test.py` (reports saved in `test-results/live-multisource/`).
+- **Phase 5: Sponsor Integration & Agent Interoperability**: Complete within honest scope:
+  - Added `ExecutionContext` (`execution_id`), `AgentHandoffRecord`, per-step pipeline timeouts, modular `backend/integrations/` adapters, `/integrations/status`, `/integrations/check/{platform_id}`, `/integrations/delegate`, BAND lifecycle/event/A2A delegation enhancements, Agent Activity UI telemetry, and opt-in `scripts/live_integrations_test.py`.
+- **Phase 6: Deployment Readiness Audit & Operational Setup**: Complete:
+  - Conducted technical readiness audit across architecture, port isolation, security, history persistence, background collector requirements, and sponsor interoperability.
+  - Preserved backend port `8010` (strictly isolated from separate AID-DRAS service on port `8000`).
+  - Added configurable CORS security (`CORS_ALLOWED_ORIGINS`) and history storage path (`HISTORY_STORAGE_PATH`) in settings.
+  - Updated [`.env.example`](file:///home/jagapathi/Projects/intelliscope-ai/.env.example) with complete, safe deployment placeholders.
+  - Created [docs/DEPLOYMENT_READINESS_REPORT.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_READINESS_REPORT.md) and [docs/DEPLOYMENT_GUIDE.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_GUIDE.md).
+  - Verified 257 backend tests, 12 frontend unit tests, and production build.
 
 ---
 
@@ -906,12 +996,29 @@ Open `http://localhost:5173` in your browser.
 ### 3. Build Frontend for Production
 ```bash
 cd frontend
-npm run build
+VITE_API_BASE_URL="" npm run build
 ```
 
-### 4. Run Test Suites
-- **Backend**: `.venv/bin/pytest -v` (211 passed)
-- **Frontend**: `cd frontend && npm test` (9 passed)
+### 4. Run Test Suites & Opt-In Live Validation
+- **Backend (mocked unit & integration suite)**: `.venv/bin/pytest -v` (257 passed; live network checks excluded cleanly via `pytest.ini`)
+- **Frontend**: `cd frontend && npm test` (12 passed) and `npm run build`
+- **Opt-In Live Multi-Source Validation**: `.venv/bin/python scripts/live_multisource_test.py`
+- **Opt-In Live Sponsor Integration Probe**: `.venv/bin/python scripts/live_integrations_test.py`
+- **Opt-In Live BAND Room E2E Check**: `.venv/bin/python scripts/live_band_room_test.py`
+
+### 5. Deployment Options
+- **Free Render Cloud Deployment**: Refer to [docs/RENDER_DEPLOYMENT_GUIDE.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/RENDER_DEPLOYMENT_GUIDE.md) and [render.yaml](file:///home/jagapathi/Projects/intelliscope-ai/render.yaml) for deploying the FastAPI backend (Free Web Service) and React SPA (Free Static Site with SPA rewrite rules).
+- **Persistent BAND Collector Setup**: Refer to [docs/BAND_REMOTE_BACKEND_SETUP.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/BAND_REMOTE_BACKEND_SETUP.md) for connecting the local Ubuntu BAND collector daemon to your remote Render backend.
+- **Single Linux Server Deployment**: Refer to [docs/DEPLOYMENT_GUIDE.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_GUIDE.md) and [docs/DEPLOYMENT_READINESS_REPORT.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_READINESS_REPORT.md) for systemd services, Nginx reverse proxy, and local hosting.
+
+Production backend invocation:
+```bash
+uvicorn backend.main:app --host 0.0.0.0 --port 8010 --workers 1
+```
+Production BAND collector daemon invocation (local or remote backend):
+```bash
+python scripts/band_collector_agent.py --backend-url http://127.0.0.1:8010
+```
 
 ---
 

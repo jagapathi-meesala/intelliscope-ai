@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "intelliscope-ai": {
+      "command": "/home/jagapathi/Projects/intelliscope-ai/.venv/bin/python",
+      "args": [
+        "/home/jagapathi/Projects/intelliscope-ai/scripts/intelliscope_mcp_server.py"
+      ],
+      "env": {
+        "INTELLISCOPE_BACKEND_URL": "http://127.0.0.1:8010"
+      }
+    }
+  }
+}
+

@@ -70,6 +70,9 @@ export function buildHistorySummary(response) {
   return {
     id: response.pipeline_id,
     pipeline_id: response.pipeline_id,
+    execution_id: response.execution_id || response.pipeline_id,
+    origin_platform: response.shared_context?.origin_platform || 'api',
+    handoff_count: Array.isArray(response.handoffs) ? response.handoffs.length : 0,
     query: response.query,
     status: response.status,
     duration_ms: response.total_duration_ms ?? 0,
@@ -85,8 +88,30 @@ export function buildHistorySummary(response) {
       0,
     quality_score: response.verification?.quality_score ?? 0,
     theme_count: themes.length,
+    sources_requested: response.research?.sources_requested || ['wikipedia'],
+    source_breakdown: response.research?.source_breakdown || {},
     summary: response.summary || response.analysis?.executive_summary || null,
   };
+}
+
+/**
+ * Extract normalized provider counts cleanly without fabrication.
+ */
+export function getSourceDistribution(source) {
+  if (!source || typeof source !== 'object') return {};
+  if (source.source_distribution && typeof source.source_distribution === 'object') {
+    return source.source_distribution;
+  }
+  if (source.dashboard?.source_distribution && typeof source.dashboard.source_distribution === 'object') {
+    return source.dashboard.source_distribution;
+  }
+  if (source.analysis?.source_distribution && typeof source.analysis.source_distribution === 'object') {
+    return source.analysis.source_distribution;
+  }
+  if (source.research?.source_breakdown && typeof source.research.source_breakdown === 'object') {
+    return source.research.source_breakdown;
+  }
+  return {};
 }
 
 function normalizeBackendSummary(item) {

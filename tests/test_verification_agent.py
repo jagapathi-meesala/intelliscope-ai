@@ -535,3 +535,103 @@ async def test_phase_3_3_verification_reporting_counts_and_separation():
     assert "factual claims within snippets are verified facts" in report["factual_accuracy_disclaimer"]
 
 
+@pytest.mark.asyncio
+async def test_verify_research_multi_source_domains_and_valid_doi():
+    """Verify arXiv and Crossref domains and valid DOIs pass structural verification."""
+    data = {
+        "query": "quantum computing",
+        "results": [
+            {
+                "title": "Quantum computing",
+                "snippet": "Quantum computing relies on quantum mechanical phenomena.",
+                "source_name": "wikipedia",
+                "source_url": "https://en.wikipedia.org/wiki/Quantum_computing",
+                "retrieved_at": "2026-03-01T10:00:00Z",
+            },
+            {
+                "title": "Fault-Tolerant Quantum Codes",
+                "snippet": "Surface codes protect logical qubits in scalable quantum processors.",
+                "source_name": "arxiv",
+                "source_url": "https://arxiv.org/abs/2401.12345v1",
+                "doi": "10.1103/PhysRevLett.132.010501",
+                "retrieved_at": "2026-03-01T10:00:00Z",
+            },
+            {
+                "title": "Error Mitigation in Practice",
+                "snippet": "Zero-noise extrapolation reduces circuit bias across superconducting hardware.",
+                "source_name": "crossref",
+                "source_url": "https://doi.org/10.1038/s41586-024-07000-1",
+                "doi": "10.1038/s41586-024-07000-1",
+                "retrieved_at": "2026-03-01T10:00:00Z",
+            },
+        ],
+    }
+
+    report = await verify_research(data)
+    assert report["status"] == "passed"
+    assert report["structurally_valid_count"] == 3
+    for item in report["results"]:
+        assert item["checks"]["https_valid"] is True
+        assert item["checks"]["domain_allowed"] is True
+    assert report["results"][1]["checks"]["doi_valid"] is True
+    assert report["results"][2]["checks"]["doi_valid"] is True
+    assert report["summary"]["duplicate_dois_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_verify_research_invalid_source_domain_bad_doi_and_duplicate_doi():
+    """Verify source-specific domain checks, invalid DOI flagging, and duplicate DOI detection."""
+    data = {
+        "query": "quantum computing",
+        "results": [
+            {
+                "title": "Paper One",
+                "snippet": "First paper discussing quantum computing error thresholds.",
+                "source_name": "crossref",
+                "source_url": "https://doi.org/10.1000/shared-doi-1",
+                "doi": "10.1000/shared-doi-1",
+                "retrieved_at": "2026-03-01T10:00:00Z",
+            },
+            {
+                "title": "Paper Two Duplicate DOI",
+                "snippet": "Second record sharing the same DOI via an alternate link.",
+                "source_name": "arxiv",
+                "source_url": "https://arxiv.org/abs/2401.99999v1",
+                "doi": "10.1000/shared-doi-1",
+                "retrieved_at": "2026-03-01T10:00:00Z",
+            },
+            {
+                "title": "Malformed DOI Paper",
+                "snippet": "Preprint carrying a syntactically invalid DOI string.",
+                "source_name": "arxiv",
+                "source_url": "https://arxiv.org/abs/2401.88888v1",
+                "doi": "invalid-doi-format",
+                "retrieved_at": "2026-03-01T10:00:00Z",
+            },
+            {
+                "title": "Untrusted Crossref Spoof",
+                "snippet": "Crossref item pointing outside doi.org.",
+                "source_name": "crossref",
+                "source_url": "https://untrusted.example.com/paper",
+                "doi": "10.1000/other",
+                "retrieved_at": "2026-03-01T10:00:00Z",
+            },
+        ],
+    }
+
+    report = await verify_research(data)
+    res = report["results"]
+
+    assert res[0]["checks"]["doi_valid"] is True
+    assert res[0]["checks"]["is_duplicate_doi"] is False
+
+    assert res[1]["checks"]["is_duplicate_doi"] is True
+    assert report["summary"]["duplicate_dois_count"] == 1
+
+    assert res[2]["checks"]["doi_valid"] is False
+    assert any("doi" in msg.lower() for msg in (res[2]["warnings"] + res[2]["errors"]))
+
+    assert res[3]["checks"]["domain_allowed"] is False
+    assert res[3]["status"] == "invalid"
+
+

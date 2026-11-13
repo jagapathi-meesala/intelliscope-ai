@@ -1,0 +1,128 @@
+{
+  "phase": "4.5",
+  "title": "IntelliScope AI Live Multi-Source Validation",
+  "generated_at": "2026-11-11T18:40:12.357923+00:00",
+  "query": "quantum computing",
+  "limit": 3,
+  "polite_delay_seconds": 3.0,
+  "timeout_seconds": 25.0,
+  "execution_target": "in-process FastAPI ASGI (live external HTTP to Wikipedia/arXiv/Crossref)",
+  "overall_status": "external_outage",
+  "endpoints_under_test": {
+    "wikipedia": "https://en.wikipedia.org/w/api.php",
+    "arxiv": "https://export.arxiv.org/api/query",
+    "crossref": "https://api.crossref.org/works"
+  },
+  "summary": {
+    "total_scenarios": 5,
+    "passed": 0,
+    "failed": 0,
+    "external_outages": 5,
+    "skipped": 0,
+    "live_network_passed": 0,
+    "live_network_failed": 0,
+    "live_network_outages": 4,
+    "hybrid_passed": 0,
+    "hybrid_failed": 0,
+    "note_on_unit_tests": "This report covers live network validation only. Mocked unit/integration tests live in tests/ and run separately via '.venv/bin/pytest -v'."
+  },
+  "scenarios": [
+    {
+      "id": "live_source_wikipedia",
+      "name": "Live Independent Source: wikipedia",
+      "test_kind": "live_network",
+      "sources": [
+        "wikipedia"
+      ],
+      "status": "external_outage",
+      "http_status": 502,
+      "duration_ms": 41.75,
+      "error": "POST /research HTTP 502: Upstream research provider encountered an error."
+    },
+    {
+      "id": "live_source_arxiv",
+      "name": "Live Independent Source: arxiv",
+      "test_kind": "live_network",
+      "sources": [
+        "arxiv"
+      ],
+      "status": "external_outage",
+      "http_status": 502,
+      "duration_ms": 16.13,
+      "error": "POST /research HTTP 502: Upstream research provider encountered an error."
+    },
+    {
+      "id": "live_source_crossref",
+      "name": "Live Independent Source: crossref",
+      "test_kind": "live_network",
+      "sources": [
+        "crossref"
+      ],
+      "status": "external_outage",
+      "http_status": 502,
+      "duration_ms": 13.71,
+      "error": "POST /research HTTP 502: Upstream research provider encountered an error."
+    },
+    {
+      "id": "live_combined_multisource_pipeline",
+      "name": "Live Combined Multi-Source Pipeline (wikipedia + arxiv + crossref)",
+      "test_kind": "live_network",
+      "sources": [
+        "wikipedia",
+        "arxiv",
+        "crossref"
+      ],
+      "status": "external_outage",
+      "duration_ms": 18.42,
+      "pipeline_status": "failed",
+      "agent_statuses": {
+        "data_collector": {
+          "agent_key": "data_collector",
+          "agent_name": "Data Collector Agent",
+          "status": "failed",
+          "duration_ms": 12.99,
+          "details": null,
+          "error": "Network error while connecting to upstream search service: [Errno -3] Temporary failure in name resolution"
+        },
+        "research_verification": {
+          "agent_key": "research_verification",
+          "agent_name": "Research Verification Agent",
+          "status": "skipped",
+          "duration_ms": 0.0,
+          "details": "Skipped due to Data Collector failure",
+          "error": null
+        },
+        "insight_analyst": {
+          "agent_key": "insight_analyst",
+          "agent_name": "Insight Analyst Agent",
+          "status": "skipped",
+          "duration_ms": 0.0,
+          "details": "Skipped due to Data Collector failure",
+          "error": null
+        },
+        "dashboard_builder": {
+          "agent_key": "dashboard_builder",
+          "agent_name": "Dashboard Builder Agent",
+          "status": "skipped",
+          "duration_ms": 0.0,
+          "details": "Skipped due to Data Collector failure",
+          "error": null
+        }
+      },
+      "error": "Network error while connecting to upstream search service: [Errno -3] Temporary failure in name resolution"
+    },
+    {
+      "id": "controlled_partial_failure_honesty",
+      "name": "Controlled Partial Failure Honesty (live wikipedia+crossref + simulated arxiv timeout)",
+      "test_kind": "hybrid_controlled_partial_failure",
+      "sources": [
+        "wikipedia",
+        "arxiv",
+        "crossref"
+      ],
+      "status": "external_outage",
+      "duration_ms": 15.86,
+      "error": "Network error while connecting to upstream search service: [Errno -3] Temporary failure in name resolution"
+    }
+  ]
+}

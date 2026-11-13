@@ -54,6 +54,14 @@ class VerificationItemChecks(BaseModel):
     timestamp_valid: bool = Field(..., description="Whether retrieval timestamp is valid ISO 8601")
     is_duplicate_url: bool = Field(..., description="Whether source URL is a duplicate within the batch")
     is_duplicate_title: bool = Field(..., description="Whether title is a duplicate within the batch")
+    doi_valid: Optional[bool] = Field(
+        default=None,
+        description="Whether DOI matches standard syntax when provided (None if not provided)"
+    )
+    is_duplicate_doi: bool = Field(
+        default=False,
+        description="Whether DOI is a duplicate within the batch"
+    )
 
 
 class VerificationItemReport(BaseModel):
@@ -62,7 +70,9 @@ class VerificationItemReport(BaseModel):
     """
     index: int = Field(..., description="Zero-based index of the result item in the batch")
     title: Optional[str] = Field(default=None, description="Title of the article, if available")
+    source_name: str = Field(default="wikipedia", description="Normalized source provider name")
     source_url: Optional[str] = Field(default=None, description="Source URL, if available")
+    doi: Optional[str] = Field(default=None, description="DOI identifier evaluated, if present")
     status: str = Field(..., description="Item verification status: 'valid', 'warning', or 'invalid'")
     item_score: float = Field(..., ge=0.0, le=100.0, description="Calculated quality score for this item (0 to 100)")
     is_weakly_relevant: bool = Field(default=False, description="Whether the item was identified as weakly relevant to the query")
@@ -83,6 +93,7 @@ class VerificationSummary(BaseModel):
     error_count: int = Field(..., description="Total count of errors generated")
     duplicate_urls_count: int = Field(..., description="Number of duplicate source URLs found")
     duplicate_titles_count: int = Field(..., description="Number of duplicate titles found")
+    duplicate_dois_count: int = Field(default=0, description="Number of duplicate DOIs found")
     structurally_valid_count: int = Field(default=0, description="Count of items meeting structural integrity requirements")
     directly_relevant_count: int = Field(default=0, description="Count of items assessed as directly relevant to query")
     weakly_relevant_count: int = Field(default=0, description="Count of items assessed as weakly relevant to query")

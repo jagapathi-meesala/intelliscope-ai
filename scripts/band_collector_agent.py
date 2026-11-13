@@ -12,7 +12,9 @@ When mentioned in a BAND room:
 5. Deterministic execution with zero LLM API key dependencies.
 """
 
+import argparse
 import asyncio
+from contextvars import ContextVar
 import json
 import logging
 import os
@@ -21,6 +23,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, MagicMock
+import uuid
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -28,19 +31,27 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import httpx
-from band import Agent, AgentConfig, PlatformMessage, configure_logging
+from band import Agent, AgentConfig, PlatformMessage, SessionConfig, configure_logging
 from band.client.rest import AsyncRestClient
 from band.config import load_agent_config
 from band.config.settings import DEFAULT_REST_URL, DEFAULT_WS_URL
 from band.core.protocols import AgentToolsProtocol
 from band.core.simple_adapter import SimpleAdapter
 from band.core.types import ConflictPolicy
+from band_sdk_core import AgentFailure
+
+from backend.integrations.band_adapter import BandSponsorAdapter
 
 logger = logging.getLogger("intelliscope.band_collector")
+
+# Correlates an active BAND room turn with call_pipeline_api without altering existing call kwargs
+_BAND_CALL_CONTEXT: ContextVar[Optional[Dict[str, Any]]] = ContextVar("band_call_context", default=None)
 
 DEFAULT_BACKEND_URL = os.environ.get("INTELLISCOPE_BACKEND_URL", "http://127.0.0.1:8010")
 DEFAULT_AGENT_KEY = "data_collector"
 DEFAULT_SEARCH_LIMIT = 3
+DEFAULT_RESEARCH_SOURCES = ["wikipedia"]
+SUPPORTED_BAND_SOURCES = ("wikipedia", "arxiv", "crossref")
 MAX_QUERY_LENGTH = 300
 
 
@@ -112,28 +123,103 @@ KNOWN_AGENT_IDENTITIES = [
 ]
 
 
-def parse_research_request(
+def _normalize_band_source_tokens(raw_tokens: str) -> List[str]:
+    """Normalize explicit BAND source modifiers ('wiki', 'arxiv', 'crossref', 'all')."""
+    if not raw_tokens:
+        return []
+    tokens = re.split(r"[\s,+/&|]+", raw_tokens.strip().lower())
+    resolved: List[str] = []
+    seen = set()
+    for tok in tokens:
+        if not tok or tok == "and":
+            continue
+        if tok == "all":
+            for full_src in SUPPORTED_BAND_SOURCES:
+                if full_src not in seen:
+                    seen.add(full_src)
+                    resolved.append(full_src)
+            continue
+        canonical = "wikipedia" if tok == "wiki" else tok
+        if canonical in SUPPORTED_BAND_SOURCES and canonical not in seen:
+            seen.add(canonical)
+            resolved.append(canonical)
+    return resolved
+
+
+def _extract_sources_from_text(text: str) -> Tuple[str, List[str]]:
+    """
+    Extract optional explicit research sources (e.g. 'sources=arxiv,crossref',
+    '(sources: wikipedia, arxiv)', '[arxiv, crossref]', 'from arxiv')
+    without altering natural queries like 'Wikipedia history' or 'Operations research'.
+    """
+    extracted_sources: List[str] = []
+
+    # 1. Bracketed 'sources: ...' or 'source=...'
+    m = re.search(
+        r"[\(\[]\s*\bsources?\s*[:=]\s*([^)\]]+?)\s*[\)\]]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        extracted_sources = _normalize_band_source_tokens(m.group(1))
+        if extracted_sources:
+            text = text[: m.start()] + " " + text[m.end() :]
+            return text, extracted_sources
+
+    # 2. Inline 'sources=arxiv,crossref' or 'source: arxiv'
+    m = re.search(
+        r"\b--?sources?\s+((?:wikipedia|wiki|arxiv|crossref|all)(?:\s*[,+|&]\s*(?:wikipedia|wiki|arxiv|crossref|all))*)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        m = re.search(
+            r"\bsources?\s*[:=]\s*((?:wikipedia|wiki|arxiv|crossref|all)(?:\s*[,+|&]\s*(?:wikipedia|wiki|arxiv|crossref|all))*)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    if m:
+        extracted_sources = _normalize_band_source_tokens(m.group(1))
+        if extracted_sources:
+            text = text[: m.start()] + " " + text[m.end() :]
+            return text, extracted_sources
+
+    # 3. Bracketed shorthand '[arxiv, crossref]' or '(arxiv)'
+    m = re.search(
+        r"[\(\[]\s*((?:wikipedia|wiki|arxiv|crossref|all)(?:\s*[,+|&\s]\s*(?:wikipedia|wiki|arxiv|crossref|all))*)\s*[\)\]]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        extracted_sources = _normalize_band_source_tokens(m.group(1))
+        if extracted_sources:
+            text = text[: m.start()] + " " + text[m.end() :]
+            return text, extracted_sources
+
+    # 4. Explicit trailing modifier 'using arxiv and crossref' / 'from arxiv'
+    m = re.search(
+        r"(?:^|\s)(?:from|using)\s+((?:wikipedia|wiki|arxiv|crossref)(?:\s*(?:,|and|&|\+)\s*(?:wikipedia|wiki|arxiv|crossref))*)\s*$",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        extracted_sources = _normalize_band_source_tokens(m.group(1))
+        if extracted_sources:
+            text = text[: m.start()].strip()
+            return text, extracted_sources
+
+    return text, list(DEFAULT_RESEARCH_SOURCES)
+
+
+def parse_research_command(
     content: Any,
     agent_handle: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
     agent_name: Optional[str] = None,
-) -> Tuple[str, int]:
+) -> Tuple[str, int, List[str]]:
     """
-    Extract and sanitize search query and optional result limit from a BAND chat message.
-
-    Handles BAND SDK message structures (PlatformMessage or raw string), strips
-    agent mentions (@IntelliScope Collector, @owner/handle, @/handle, @handle, @[[uuid]], <@uuid>),
-    removes command handles (/intelliscope-collector, /collector), extracts limit bounds [1-10],
-    and removes leading research action instructions without stripping legitimate topic words.
-
-    Args:
-        content: Raw message text string or BAND PlatformMessage object.
-        agent_handle: Optional specific agent mention handle or name to strip.
-        metadata: Optional message metadata dictionary (e.g. from PlatformMessage.metadata).
-        agent_name: Optional agent display name to strip.
-
-    Returns:
-        Tuple of (sanitized_query, limit). If no query is found, query is empty string "".
+    Extract sanitized query, limit [1-10], and optional research sources list
+    from a BAND chat message. Defaults sources to ['wikipedia'] when omitted.
     """
     # 1. Extract raw content text and metadata
     if hasattr(content, "content"):
@@ -146,7 +232,7 @@ def parse_research_request(
         raw_text = str(content)
 
     if not raw_text or not raw_text.strip():
-        return "", DEFAULT_SEARCH_LIMIT
+        return "", DEFAULT_SEARCH_LIMIT, list(DEFAULT_RESEARCH_SOURCES)
 
     text = raw_text.strip()
 
@@ -206,11 +292,14 @@ def parse_research_request(
             limit = DEFAULT_SEARCH_LIMIT
         text = text[:limit_match.start()] + " " + text[limit_match.end():]
 
-    # 9. Clean up surrounding whitespace and punctuation before matching action instructions
+    # 9. Extract optional explicit source selection modifiers (defaults to ['wikipedia'])
+    text, sources = _extract_sources_from_text(text)
+
+    # 10. Clean up surrounding whitespace and punctuation before matching action instructions
     cleaned = re.sub(r"\s+", " ", text).strip()
     cleaned = re.sub(r"^[:,\-\s]+", "", cleaned)
 
-    # 10. Strip leading action/research instructions (strictly at the beginning, single match)
+    # 11. Strip leading action/research instructions (strictly at the beginning, single match)
     action_keywords = [
         r"^(?:please\s+)?research\s+on\s*[:\-]?",
         r"^(?:please\s+)?research\s*[:\-]?",
@@ -231,15 +320,33 @@ def parse_research_request(
             cleaned = cleaned[m.end():].strip()
             break
 
-    # 11. Remove enclosing quotes, parenthesis, or punctuation
+    # 12. Remove enclosing quotes, parenthesis, or punctuation
     cleaned = re.sub(r"^[\"\'\(\[\{:\-]+|[\"\'\)\]\}:]+$", "", cleaned).strip()
     cleaned = re.sub(r"\s+", " ", cleaned)
 
     if len(cleaned) > MAX_QUERY_LENGTH:
         cleaned = cleaned[:MAX_QUERY_LENGTH].rstrip()
 
-    logger.debug("Sanitized research query: '%s' (limit=%d)", cleaned, limit)
-    return cleaned, limit
+    logger.debug("Sanitized research query: '%s' (limit=%d, sources=%s)", cleaned, limit, sources)
+    return cleaned, limit, sources
+
+
+def parse_research_request(
+    content: Any,
+    agent_handle: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    agent_name: Optional[str] = None,
+) -> Tuple[str, int]:
+    """
+    Backward-compatible 2-tuple wrapper extracting (sanitized_query, limit).
+    """
+    query, limit, _ = parse_research_command(
+        content=content,
+        agent_handle=agent_handle,
+        metadata=metadata,
+        agent_name=agent_name,
+    )
+    return query, limit
 
 
 # ------------------------------------------------------------------------------
@@ -316,9 +423,12 @@ def format_pipeline_reply(data: Dict[str, Any], query: str) -> str:
     analysis = data.get("analysis") or {}
     dashboard = data.get("dashboard") or {}
 
+    exec_id = data.get("execution_id") or data.get("pipeline_id")
+    exec_tag = f" | **Exec:** `{str(exec_id)[:8]}`" if exec_id else ""
+
     lines: List[str] = [
         "🚀 **IntelliScope Multi-Agent Intelligence Pipeline**",
-        f"**Topic:** *{query}* | **Status:** {status.upper()} ({total_duration:.1f}ms)\n",
+        f"**Topic:** *{query}* | **Status:** {status.upper()} ({total_duration:.1f}ms){exec_tag}\n",
         "⚡ **Agent Fleet Execution:**",
     ]
 
@@ -335,12 +445,28 @@ def format_pipeline_reply(data: Dict[str, Any], query: str) -> str:
 
     # Handle empty results
     research_results = research.get("results", [])
+    source_errors = research.get("source_errors") or {}
     if not research_results or research.get("result_count", 0) == 0:
-        lines.append(f"🔍 **Notice:** No verified articles or summary snippets were found for *'{query}'* on Wikipedia.")
+        req_sources = ", ".join(research.get("sources_requested") or ["Wikipedia"])
+        lines.append(
+            f"🔍 **Notice:** No verified articles or summary snippets were found for *'{query}'* across {req_sources}."
+        )
+        if source_errors:
+            err_str = "; ".join(f"{k}: {v}" for k, v in source_errors.items())
+            lines.append(f"⚠️ **Provider Notices:** {err_str}")
         if summary:
             lines.append(f"\n📋 **Analyst Summary:**\n> {summary}")
         lines.append("\n*All pipeline agents completed. Zero data fabricated.*")
         return "\n".join(lines)
+
+    # Multi-Source Retrieval Breakdown & Non-Fatal Partial Errors
+    source_breakdown = research.get("source_breakdown") or {}
+    if source_breakdown:
+        sb_str = " | ".join(f"**{src}:** {cnt}" for src, cnt in source_breakdown.items())
+        lines.append(f"📚 **Sources Queried:** {sb_str}")
+    if source_errors:
+        err_str = "; ".join(f"{k}: {v}" for k, v in source_errors.items())
+        lines.append(f"⚠️ **Partial Source Notices:** {err_str}")
 
     # Verification Scope Breakdown
     if verification:
@@ -374,7 +500,7 @@ def format_pipeline_reply(data: Dict[str, Any], query: str) -> str:
     else:
         lines.append("🏷️ **Key Themes (0):** *None identified from eligible evidence.*\n")
 
-    # Evidence Sources with provenance & confidence reasons
+    # Evidence Sources with provenance, publication metadata & confidence reasons
     provenance_by_url = {
         (item.get("source_url") or item.get("source")): item
         for item in research_results
@@ -390,10 +516,16 @@ def format_pipeline_reply(data: Dict[str, Any], query: str) -> str:
             conf = obs.get("confidence", "")
             conf_reason = obs.get("confidence_reason", "")
             src_meta = provenance_by_url.get(url, {})
-            source_type = src_meta.get("source_type", "")
+            source_name = obs.get("source_name") or src_meta.get("source_name", "")
+            source_type = obs.get("source_type") or src_meta.get("source_type", "")
+            pub_date = obs.get("publication_date") or src_meta.get("publication_date")
+            doi = obs.get("doi") or src_meta.get("doi")
+            authors = obs.get("authors") or src_meta.get("authors") or []
             is_weak = bool(obs.get("is_weakly_relevant") or src_meta.get("is_weakly_relevant"))
 
             tags = []
+            if source_name:
+                tags.append(source_name)
             if source_type:
                 tags.append(source_type)
             if is_weak:
@@ -406,6 +538,18 @@ def format_pipeline_reply(data: Dict[str, Any], query: str) -> str:
                 lines.append(f"{idx}. **[{title}]({url})**{tag_str}")
             else:
                 lines.append(f"{idx}. **{title}**{tag_str}")
+
+            meta_parts = []
+            if authors:
+                shown_authors = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
+                meta_parts.append(f"Authors: {shown_authors}")
+            if pub_date:
+                meta_parts.append(f"Published: {pub_date}")
+            if doi:
+                meta_parts.append(f"DOI: `{doi}`")
+            if meta_parts:
+                lines.append(f"   *{' | '.join(meta_parts)}*")
+
             if statement:
                 lines.append(f"   > {statement}")
             if conf_reason:
@@ -443,6 +587,7 @@ def format_pipeline_reply(data: Dict[str, Any], query: str) -> str:
             "topic": dashboard.get("topic"),
             "title": dashboard.get("title"),
             "kpi_cards": dashboard.get("kpi_cards", []),
+            "source_distribution": dashboard.get("source_distribution", {}),
             "themes": dash_themes,
             "charts": dashboard.get("charts", []),
             "metadata": dashboard.get("metadata", {}),
@@ -473,8 +618,9 @@ def format_usage_reply() -> str:
         f"I am the Data Collector Agent for IntelliScope AI. To research a topic, mention me with your query:\n\n"
         f"- `@DataCollector research Artificial intelligence`\n"
         f"- `@DataCollector research Quantum computing (limit: 5)`\n"
-        f"- `@DataCollector search: Renewable energy`\n\n"
-        f"I will gather verified encyclopedia sources and return structured evidence to this room."
+        f"- `@DataCollector research Neural networks sources=wikipedia,arxiv,crossref`\n"
+        f"- `@DataCollector search: Renewable energy [arxiv, crossref]`\n\n"
+        f"I will gather verified encyclopedia and scholarly sources and return structured evidence to this room."
     )
 
 
@@ -486,21 +632,15 @@ async def call_research_api(
     limit: int = DEFAULT_SEARCH_LIMIT,
     backend_url: str = DEFAULT_BACKEND_URL,
     client: Optional[httpx.AsyncClient] = None,
+    sources: Optional[List[str]] = None,
 ) -> Tuple[bool, Dict[str, Any] | str]:
     """
     Call the existing IntelliScope FastAPI backend (POST /research) asynchronously.
-
-    Args:
-        query: Research query string.
-        limit: Max results count (1-10).
-        backend_url: Base URL of FastAPI server.
-        client: Optional shared HTTPX async client.
-
-    Returns:
-        Tuple of (success_flag, data_or_error_message).
     """
     endpoint = f"{backend_url.rstrip('/')}/research"
-    payload = {"query": query, "limit": limit}
+    payload: Dict[str, Any] = {"query": query, "limit": limit}
+    if sources is not None:
+        payload["sources"] = sources
 
     async def _post(c: httpx.AsyncClient) -> httpx.Response:
         return await c.post(endpoint, json=payload, timeout=20.0)
@@ -514,6 +654,8 @@ async def call_research_api(
 
         if response.status_code == 200:
             return True, response.json()
+        elif response.status_code == 429:
+            return False, "Upstream research provider rate limit exceeded. Please try again later."
         elif response.status_code == 504:
             return False, "Upstream research service timed out. Please try again later."
         elif response.status_code == 502:
@@ -531,7 +673,7 @@ async def call_research_api(
         return (
             False,
             f"Cannot connect to IntelliScope backend at {backend_url}. "
-            f"Ensure FastAPI server is active on port 8010."
+            f"Ensure FastAPI server is active and reachable (port 8010 locally or remote URL)."
         )
     except httpx.TimeoutException:
         return False, "Request to IntelliScope backend timed out after 20 seconds."
@@ -544,63 +686,86 @@ async def call_pipeline_api(
     limit: int = DEFAULT_SEARCH_LIMIT,
     backend_url: str = DEFAULT_BACKEND_URL,
     client: Optional[httpx.AsyncClient] = None,
+    sources: Optional[List[str]] = None,
+    max_retries: int = 0,
 ) -> Tuple[bool, Dict[str, Any] | str]:
     """
     Call the IntelliScope FastAPI unified multi-agent pipeline endpoint (POST /pipeline).
 
     Orchestrates: Data Collector -> Research Verification -> Insight Analyst -> Dashboard Builder.
-
-    Args:
-        query: Research query string.
-        limit: Max results count (1-10).
-        backend_url: Base URL of FastAPI server.
-        client: Optional shared HTTPX async client.
-
-    Returns:
-        Tuple of (success_flag, data_or_error_message).
     """
     endpoint = f"{backend_url.rstrip('/')}/pipeline"
-    payload = {"query": query, "limit": limit}
+    payload: Dict[str, Any] = {"query": query, "limit": limit}
+    if sources is not None:
+        payload["sources"] = sources
+
+    ctx = _BAND_CALL_CONTEXT.get()
+    if isinstance(ctx, dict):
+        if ctx.get("execution_id"):
+            payload["execution_id"] = ctx["execution_id"]
+        if ctx.get("origin_platform"):
+            payload["origin_platform"] = ctx["origin_platform"]
+        if ctx.get("origin_room_id"):
+            payload["origin_room_id"] = ctx["origin_room_id"]
+        if ctx.get("requester"):
+            payload["requester"] = ctx["requester"]
 
     async def _post(c: httpx.AsyncClient) -> httpx.Response:
         return await c.post(endpoint, json=payload, timeout=45.0)
 
-    try:
-        if client is not None:
-            response = await _post(client)
-        else:
-            async with httpx.AsyncClient() as local_client:
-                response = await _post(local_client)
+    attempts = max(1, max_retries + 1)
+    last_error = "Pipeline execution failed."
 
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "failed":
-                summary = data.get("summary") or "Pipeline execution failed."
-                return False, summary
-            return True, data
-        elif response.status_code == 504:
-            return False, "Upstream research service timed out. Please try again later."
-        elif response.status_code == 502:
-            return False, "Upstream research provider encountered an error connecting to external sources."
-        elif response.status_code in (400, 422):
-            try:
-                detail = response.json().get("detail", response.text)
-            except Exception:
-                detail = response.text
-            return False, f"Request validation failed: {detail}"
-        else:
-            return False, f"Backend returned unexpected HTTP status {response.status_code}."
+    for attempt in range(attempts):
+        if attempt > 0:
+            await asyncio.sleep(0.25 * (2 ** (attempt - 1)))
+        try:
+            if client is not None:
+                response = await _post(client)
+            else:
+                async with httpx.AsyncClient() as local_client:
+                    response = await _post(local_client)
 
-    except httpx.ConnectError:
-        return (
-            False,
-            f"Cannot connect to IntelliScope backend at {backend_url}. "
-            f"Ensure FastAPI server is active on port 8010."
-        )
-    except httpx.TimeoutException:
-        return False, "Request to IntelliScope backend timed out after 45 seconds."
-    except Exception as exc:
-        return False, f"Unexpected network communication error: {str(exc)}"
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "failed":
+                    summary = data.get("summary") or "Pipeline execution failed."
+                    return False, summary
+                return True, data
+            elif response.status_code == 429:
+                last_error = "Upstream research provider rate limit exceeded. Please try again later."
+                continue
+            elif response.status_code == 504:
+                last_error = "Upstream research service timed out. Please try again later."
+                continue
+            elif response.status_code == 502:
+                last_error = "Upstream research provider encountered an error connecting to external sources."
+                continue
+            elif response.status_code in (400, 422):
+                try:
+                    detail = response.json().get("detail", response.text)
+                except Exception:
+                    detail = response.text
+                return False, f"Request validation failed: {detail}"
+            else:
+                last_error = f"Backend returned unexpected HTTP status {response.status_code}."
+                if response.status_code >= 500:
+                    continue
+                return False, last_error
+
+        except httpx.ConnectError:
+            last_error = (
+                f"Cannot connect to IntelliScope backend at {backend_url}. "
+                f"Ensure FastAPI server is active and reachable (port 8010 locally or remote URL)."
+            )
+            continue
+        except httpx.TimeoutException:
+            last_error = "Request to IntelliScope backend timed out after 45 seconds."
+            continue
+        except Exception as exc:
+            return False, f"Unexpected network communication error: {str(exc)}"
+
+    return False, last_error
 
 
 # ------------------------------------------------------------------------------
@@ -633,6 +798,127 @@ async def send_band_reply(
     raise RuntimeError("Agent tools protocol does not provide message delivery capabilities.")
 
 
+def extract_delegation_target(content: Any) -> Tuple[str, Optional[str]]:
+    """
+    Extract an explicit agent-to-agent delegation modifier such as
+    'delegate=@insight-peer' or 'handoff=@peer-handle' without altering ordinary prose.
+    """
+    raw = content.content if hasattr(content, "content") else ("" if content is None else str(content))
+    m = re.search(
+        r"\b(?:delegate|handoff)\s*[:=]\s*@/?([A-Za-z0-9_.\-/]{2,64})\b",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        return raw, None
+    peer_handle = m.group(1).strip()
+    cleaned = (raw[: m.start()] + " " + raw[m.end() :]).strip()
+    return cleaned, peer_handle
+
+
+async def _emit_band_event_safe(
+    tools: AgentToolsProtocol,
+    *,
+    content: str,
+    message_type: str = "task",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Emit a structured event into BAND's durable room log without breaking turn completion."""
+    send_event = getattr(tools, "send_event", None)
+    if not callable(send_event):
+        return False
+    try:
+        await send_event(content=content, message_type=message_type, metadata=metadata or {})
+        return True
+    except Exception as exc:
+        logger.debug("Best-effort BAND send_event('%s') skipped: %s", message_type, exc)
+        return False
+
+
+async def _emit_band_failure_safe(tools: AgentToolsProtocol, message: str) -> bool:
+    """Emit structured BAND AgentFailure event when available."""
+    send_failure = getattr(tools, "send_failure", None)
+    if not callable(send_failure):
+        return False
+    try:
+        await send_failure(AgentFailure("intelliscope-band", message, "pipeline_error"))
+        return True
+    except Exception as exc:
+        logger.debug("Best-effort BAND send_failure skipped: %s", exc)
+        return False
+
+
+async def lookup_available_peers(tools: AgentToolsProtocol) -> List[Dict[str, Optional[str]]]:
+    """Query BAND peers visible to this agent safely."""
+    lookup_fn = getattr(tools, "lookup_peers", None)
+    if not callable(lookup_fn):
+        return []
+    try:
+        resp = await lookup_fn(page=1, page_size=50)
+        items = getattr(resp, "data", None) or getattr(resp, "peers", None) or []
+        peers: List[Dict[str, Optional[str]]] = []
+        for peer in items:
+            handle = getattr(peer, "handle", None) if not isinstance(peer, dict) else peer.get("handle")
+            name = getattr(peer, "name", None) if not isinstance(peer, dict) else peer.get("name")
+            pid = getattr(peer, "id", None) if not isinstance(peer, dict) else peer.get("id")
+            if handle or name:
+                peers.append({"id": pid, "name": name, "handle": handle})
+        return peers
+    except Exception as exc:
+        logger.debug("Peer lookup failed safely: %s", exc)
+        return []
+
+
+async def delegate_to_peer(
+    tools: AgentToolsProtocol,
+    *,
+    peer_handle: str,
+    execution_id: str,
+    query: str,
+    pipeline_data: Dict[str, Any],
+) -> Optional[str]:
+    """
+    Post a structured BAND A2A handoff message mentioning a peer agent and record a task event.
+    Uses send_notice when available so it does not collide with the turn's primary reply.
+    """
+    task_id = f"a2a-{uuid.uuid4().hex[:8]}"
+    research_items = (pipeline_data.get("research") or {}).get("results") or []
+    source_urls = [
+        item.get("source_url")
+        for item in research_items
+        if isinstance(item, dict) and isinstance(item.get("source_url"), str)
+    ]
+    handoff_text = BandSponsorAdapter.build_delegation_message(
+        peer_handle=peer_handle,
+        execution_id=execution_id,
+        task_id=task_id,
+        query=query,
+        summary=str(pipeline_data.get("summary") or ""),
+        source_urls=source_urls,
+        action="peer_verification_and_follow_up",
+    )
+
+    mention_target = peer_handle.strip().lstrip("@")
+    await _emit_band_event_safe(
+        tools,
+        content=f"Delegated follow-up task {task_id} to @{mention_target}",
+        message_type="task",
+        metadata={
+            "execution_id": execution_id,
+            "task_id": task_id,
+            "peer_handle": mention_target,
+            "source_urls_count": len(source_urls),
+        },
+    )
+
+    send_notice = getattr(tools, "send_notice", None)
+    if callable(send_notice):
+        await send_notice(handoff_text, mentions=[mention_target])
+    else:
+        await send_band_reply(tools, handoff_text, mentions=[mention_target])
+    return task_id
+
+
 # ------------------------------------------------------------------------------
 # BAND Adapter Implementation
 # ------------------------------------------------------------------------------
@@ -640,8 +926,8 @@ class BandDataCollectorAdapter(SimpleAdapter[list]):
     """
     Official BAND SimpleAdapter for IntelliScope Data Collector Agent.
 
-    Handles room message events, extracts research queries, delegates to
-    FastAPI POST /research, and returns actual results via band_send_message.
+    Handles room message events, lifecycle hooks (on_started / on_cleanup / on_interrupt),
+    structured BAND event emission, peer handoff delegation, and FastAPI POST /pipeline execution.
     """
 
     def __init__(
@@ -654,6 +940,24 @@ class BandDataCollectorAdapter(SimpleAdapter[list]):
         self.backend_url = backend_url
         self.agent_name = agent_name
         self.agent_handle = agent_handle
+        self.started: bool = False
+        self.active_rooms: set[str] = set()
+        self.last_execution_id: Optional[str] = None
+        self.interrupt_count: int = 0
+
+    async def on_started(self, agent_name: str, agent_description: str) -> None:
+        self.started = True
+        if agent_name:
+            self.agent_name = agent_name
+        logger.info("BAND adapter started as '%s'", self.agent_name)
+
+    async def on_cleanup(self, room_id: str) -> None:
+        self.active_rooms.discard(room_id)
+        logger.info("BAND adapter cleaned up room '%s'", room_id)
+
+    async def on_interrupt(self, kind: Any = None, reason: Optional[str] = None) -> None:
+        self.interrupt_count += 1
+        logger.warning("BAND turn interrupted (kind=%s, reason=%s)", kind, reason)
 
     async def on_message(
         self,
@@ -668,30 +972,27 @@ class BandDataCollectorAdapter(SimpleAdapter[list]):
     ) -> None:
         """
         Handle incoming message turn in a BAND room.
-
-        Args:
-            msg: The triggering PlatformMessage.
-            tools: AgentToolsProtocol providing send_message / band_send_message.
-            history: Room conversation history.
-            participants_msg: Formatted room participants string.
-            contacts_msg: Formatted contacts string.
-            is_session_bootstrap: Whether this is the initial session bootstrap.
-            room_id: BAND room identifier.
         """
+        self.active_rooms.add(room_id)
+        execution_id = str(uuid.uuid4())
+        self.last_execution_id = execution_id
+
         logger.info(
-            "Received BAND message from sender '%s' (type: %s) in room '%s'",
+            "Received BAND message (exec=%s) from sender '%s' (type: %s) in room '%s'",
+            execution_id[:8],
             msg.sender_name or msg.sender_id,
             msg.sender_type,
             room_id,
         )
 
-        # Resolve mention target (BAND requires at least one mention in send_message)
         sender_target = msg.sender_name or msg.sender_id or "User"
         mentions = [sender_target]
 
-        # Parse message content for query and limit
-        query, limit = parse_research_request(
-            content=msg.content,
+        cleaned_raw_content, delegate_peer = extract_delegation_target(msg.content)
+
+        # Parse message content for query, limit, and optional sources
+        query, limit, sources = parse_research_command(
+            content=cleaned_raw_content,
             agent_handle=self.agent_handle,
             metadata=getattr(msg, "metadata", None),
             agent_name=self.agent_name,
@@ -703,43 +1004,99 @@ class BandDataCollectorAdapter(SimpleAdapter[list]):
             await send_band_reply(tools, reply_text, mentions=mentions)
             return
 
-        logger.info("Sanitized research query: '%s' (limit=%d)", query, limit)
+        logger.info(
+            "Sanitized research query (exec=%s): '%s' (limit=%d, sources=%s, delegate=%s)",
+            execution_id[:8],
+            query,
+            limit,
+            sources,
+            delegate_peer,
+        )
 
-        # Check if legacy call_research_api is mocked (for compatibility with legacy tests)
-        # Otherwise execute the unified 4-agent multi-agent pipeline (POST /pipeline)
+        await _emit_band_event_safe(
+            tools,
+            content=f"Starting IntelliScope pipeline execution {execution_id[:8]} for '{query}'",
+            message_type="task",
+            metadata={
+                "execution_id": execution_id,
+                "query": query,
+                "limit": limit,
+                "sources": sources,
+                "room_id": room_id,
+            },
+        )
+
+        call_kwargs: Dict[str, Any] = {
+            "query": query,
+            "limit": limit,
+            "backend_url": self.backend_url,
+        }
+        if sources != DEFAULT_RESEARCH_SOURCES:
+            call_kwargs["sources"] = sources
+
         is_legacy_mock = isinstance(call_research_api, (AsyncMock, MagicMock)) and not isinstance(call_pipeline_api, (AsyncMock, MagicMock))
 
-        if is_legacy_mock:
-            logger.info("Dispatching research query to legacy backend endpoint: query='%s', limit=%d", query, limit)
-            success, result_or_error = await call_research_api(
-                query=query,
-                limit=limit,
-                backend_url=self.backend_url,
-            )
-            if success and isinstance(result_or_error, dict):
-                logger.info("Successfully retrieved research results from backend.")
-                reply_text = format_research_reply(result_or_error, query)
+        ctx_token = _BAND_CALL_CONTEXT.set(
+            {
+                "execution_id": execution_id,
+                "origin_platform": "band",
+                "origin_room_id": room_id,
+                "requester": sender_target,
+            }
+        )
+        pipeline_success = False
+        pipeline_payload: Optional[Dict[str, Any]] = None
+        try:
+            if is_legacy_mock:
+                logger.info("Dispatching research query to legacy backend endpoint: query='%s', limit=%d", query, limit)
+                success, result_or_error = await call_research_api(**call_kwargs)
+                if success and isinstance(result_or_error, dict):
+                    logger.info("Successfully retrieved research results from backend.")
+                    reply_text = format_research_reply(result_or_error, query)
+                else:
+                    error_message = str(result_or_error)
+                    logger.warning("Research query failed: %s", error_message)
+                    await _emit_band_failure_safe(tools, error_message)
+                    reply_text = format_error_reply(error_message, query)
             else:
-                error_message = str(result_or_error)
-                logger.warning("Research query failed: %s", error_message)
-                reply_text = format_error_reply(error_message, query)
-        else:
-            logger.info("Dispatching query to unified multi-agent pipeline: query='%s', limit=%d", query, limit)
-            success, result_or_error = await call_pipeline_api(
-                query=query,
-                limit=limit,
-                backend_url=self.backend_url,
-            )
-            if success and isinstance(result_or_error, dict):
-                logger.info("Successfully retrieved multi-agent pipeline results from backend.")
-                reply_text = format_pipeline_reply(result_or_error, query)
-            else:
-                error_message = str(result_or_error)
-                logger.warning("Pipeline execution failed: %s", error_message)
-                reply_text = format_error_reply(error_message, query)
+                logger.info("Dispatching query to unified multi-agent pipeline: query='%s', limit=%d, sources=%s", query, limit, sources)
+                success, result_or_error = await call_pipeline_api(**call_kwargs)
+                if success and isinstance(result_or_error, dict):
+                    pipeline_success = True
+                    pipeline_payload = result_or_error
+                    logger.info("Successfully retrieved multi-agent pipeline results from backend.")
+                    await _emit_band_event_safe(
+                        tools,
+                        content=f"Completed pipeline execution {execution_id[:8]} ({result_or_error.get('status')})",
+                        message_type="tool_result",
+                        metadata={
+                            "execution_id": result_or_error.get("execution_id") or execution_id,
+                            "pipeline_id": result_or_error.get("pipeline_id"),
+                            "source_breakdown": (result_or_error.get("research") or {}).get("source_breakdown"),
+                            "handoffs_count": len(result_or_error.get("handoffs") or []),
+                        },
+                    )
+                    reply_text = format_pipeline_reply(result_or_error, query)
+                else:
+                    error_message = str(result_or_error)
+                    logger.warning("Pipeline execution failed: %s", error_message)
+                    await _emit_band_failure_safe(tools, error_message)
+                    reply_text = format_error_reply(error_message, query)
+        finally:
+            _BAND_CALL_CONTEXT.reset(ctx_token)
 
-        # Send actual results or error back to BAND room
+        # Send primary results or error back to BAND room
         await send_band_reply(tools, reply_text, mentions=mentions)
+
+        # Optional explicit BAND peer delegation when user requested delegate=@peer
+        if delegate_peer and pipeline_success and isinstance(pipeline_payload, dict):
+            await delegate_to_peer(
+                tools,
+                peer_handle=delegate_peer,
+                execution_id=str(pipeline_payload.get("execution_id") or execution_id),
+                query=query,
+                pipeline_data=pipeline_payload,
+            )
 
 
 # ------------------------------------------------------------------------------
@@ -774,6 +1131,10 @@ async def verify_band_connectivity(
         "configured_agent_id": redacted_id,
         "rest_authenticated": False,
         "agent_id_match": False,
+        "reconnect_policy": "ReconnectPolicy(reconnect_on_normal_close=True)",
+        "heartbeat_watchdog": "enabled",
+        "conflict_policy": ConflictPolicy.SUPERSEDE.value,
+        "max_cycle_seconds": 60.0,
     }
 
     try:
@@ -840,6 +1201,7 @@ def create_band_collector_agent(
     ws_url: Optional[str] = None,
     rest_url: Optional[str] = None,
     config: Optional[AgentConfig] = None,
+    session_config: Optional[SessionConfig] = None,
 ) -> Agent:
     """
     Construct a BAND Agent instance wired to BandDataCollectorAdapter.
@@ -851,6 +1213,7 @@ def create_band_collector_agent(
         ws_url: Optional custom WebSocket URL (defaults to BAND production WS URL).
         rest_url: Optional custom REST URL (defaults to BAND production REST URL).
         config: Optional AgentConfig instance (defaults to single_instance=True, SUPERSEDE).
+        session_config: Optional SessionConfig instance (defaults to bounded 60s turn cycle & failure reporting).
 
     Returns:
         Configured Agent instance ready to run.
@@ -860,6 +1223,11 @@ def create_band_collector_agent(
         single_instance=True,
         conflict_policy=ConflictPolicy.SUPERSEDE,
     )
+    resolved_session = session_config or SessionConfig(
+        max_cycle_seconds=60.0,
+        max_message_retries=1,
+        report_turn_failures_to_room=True,
+    )
     agent = Agent.create(
         adapter=adapter,
         agent_id=agent_id,
@@ -867,6 +1235,7 @@ def create_band_collector_agent(
         ws_url=ws_url,
         rest_url=rest_url,
         config=resolved_config,
+        session_config=resolved_session,
     )
     return agent
 
@@ -895,11 +1264,18 @@ async def main() -> None:
         print("Please configure agent_config.yaml or set BAND_AGENT_ID and BAND_API_KEY.")
         sys.exit(1)
 
-    backend_url = DEFAULT_BACKEND_URL
+    parser = argparse.ArgumentParser(description="IntelliScope AI: BAND Data Collector Agent")
+    parser.add_argument(
+        "--backend-url",
+        default=DEFAULT_BACKEND_URL,
+        help="IntelliScope backend API URL (default: env INTELLISCOPE_BACKEND_URL or http://127.0.0.1:8010)",
+    )
+    args, _ = parser.parse_known_args()
+    backend_url = args.backend_url.rstrip("/")
     print(f"Configured backend URL: {backend_url}")
 
     # 2. Check backend connectivity
-    async with httpx.AsyncClient(timeout=3.0) as check_client:
+    async with httpx.AsyncClient(timeout=5.0) as check_client:
         try:
             resp = await check_client.get(f"{backend_url}/health")
             if resp.status_code == 200:
@@ -909,6 +1285,8 @@ async def main() -> None:
         except Exception:
             print(f"Notice: IntelliScope backend is not currently detected at {backend_url}.")
             print("Ensure backend is started: uvicorn backend.main:app --port 8010")
+            if "onrender.com" in backend_url:
+                print("Note for Render free service: Sleeping instances take 30-50s to wake up (cold start).")
 
     # 3. Perform pre-flight BAND diagnostic verification
     print("\n--- BAND Diagnostic Verification ---")

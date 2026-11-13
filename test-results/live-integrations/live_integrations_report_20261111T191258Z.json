@@ -1,0 +1,63 @@
+{
+  "phase": "5",
+  "title": "IntelliScope AI Live Sponsor Integration Check",
+  "generated_at": "2026-11-11T19:12:58.393742+00:00",
+  "summary": {
+    "total": 5,
+    "passed": 1,
+    "failed": 0,
+    "external_outages": 0,
+    "skipped": 4
+  },
+  "platforms": [
+    {
+      "platform_id": "band",
+      "display_name": "BAND (Agentic Mesh)",
+      "category": "implemented",
+      "credentials_present": true,
+      "test_kind": "live_rest_auth_probe",
+      "status": "passed",
+      "probe_status": "connected",
+      "error": null,
+      "notes": "Active SimpleAdapter runtime (credentials loaded from agent_config.yaml; never exposed). Supports REST auth pre-flight, Phoenix WS SUPERSEDE reconnect, structured task/result events, and @peer delegation formatting via scripts/band_collector_agent.py."
+    },
+    {
+      "platform_id": "agent37",
+      "display_name": "Agent37 Cloud Sandbox",
+      "category": "partial",
+      "credentials_present": false,
+      "test_kind": "live_sandbox_health",
+      "status": "skipped",
+      "reason": "AGENT37_API_KEY / AGENT37_INSTANCE_ID not configured."
+    },
+    {
+      "platform_id": "lyzr",
+      "display_name": "Lyzr Agent Studio",
+      "category": "partial",
+      "credentials_present": false,
+      "test_kind": "live_api_probe",
+      "status": "skipped",
+      "reason": "LYZR_API_KEY / LYZR_AGENT_ID not configured."
+    },
+    {
+      "platform_id": "adal",
+      "display_name": "AdaL Agent CLI / SDK",
+      "category": "partial",
+      "credentials_present": false,
+      "runtime_state": "not_installed",
+      "test_kind": "local_runtime_availability_probe",
+      "status": "skipped",
+      "reason": "AdaL CLI (`adal`) and `adal_agent_sdk` are not installed in this environment. Install AdaL CLI & set ADAL_ENABLED=true to enable local CLI delegation."
+    },
+    {
+      "platform_id": "finch",
+      "display_name": "Finch Desktop (MCP / Mini-Tools)",
+      "category": "not_integrated",
+      "credentials_present": false,
+      "runtime_state": "not_integrated",
+      "test_kind": "local_runtime_availability_probe",
+      "status": "skipped",
+      "reason": "Not integrated for live execution: Finch (`finchwork.app`) is a desktop agent host using npm mini-tools (`@finchtoys/minitools`) and local MCP servers rather than an external REST delegation endpoint."
+    }
+  ]
+}

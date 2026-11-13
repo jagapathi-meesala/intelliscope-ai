@@ -8,6 +8,7 @@ import {
   selectLatestRunInState,
   getOverviewKpis,
   buildHistorySummary,
+  getSourceDistribution,
 } from './pipelineState.js';
 
 function makeRun({ id, query, executed_at, sources = 4, eligible = 3, themes = [], status = 'success' }) {
@@ -304,4 +305,140 @@ test('Phase 3.4: failed research run does not overwrite last successful run', ()
   assert.equal(state.currentPipeline.query, 'neural networks');
   assert.equal(state.latestSuccessfulRun.pipeline_id, 'run-nn');
 });
+
+test('Phase 4: getSourceDistribution resolves dashboard, analysis, and research fallback safely', () => {
+  assert.deepEqual(getSourceDistribution(null), {});
+  assert.deepEqual(getSourceDistribution({}), {});
+  assert.deepEqual(getSourceDistribution({ source_distribution: { wikipedia: 2, arxiv: 1 } }), {
+    wikipedia: 2,
+    arxiv: 1,
+  });
+  assert.deepEqual(
+    getSourceDistribution({ dashboard: { source_distribution: { crossref: 3 } } }),
+    { crossref: 3 }
+  );
+  assert.deepEqual(
+    getSourceDistribution({ analysis: { source_distribution: { arxiv: 2 } } }),
+    { arxiv: 2 }
+  );
+  assert.deepEqual(
+    getSourceDistribution({ research: { source_breakdown: { wikipedia: 1, crossref: 2 } } }),
+    { wikipedia: 1, crossref: 2 }
+  );
+});
+
+test('Phase 4: buildHistorySummary preserves sources_requested, source_breakdown, and multi-source provenance', () => {
+  const multiRun = {
+    pipeline_id: 'run-multi-1',
+    query: 'quantum error correction',
+    status: 'success',
+    total_duration_ms: 420,
+    executed_at: '2026-11-11T12:00:00Z',
+    research: {
+      query: 'quantum error correction',
+      result_count: 3,
+      sources_requested: ['wikipedia', 'arxiv', 'crossref'],
+      source_breakdown: { wikipedia: 1, arxiv: 1, crossref: 1 },
+      source_errors: { crossref: 'Partial note' },
+      results: [
+        {
+          title: 'Surface Codes Paper',
+          snippet: 'Logical qubits with surface codes.',
+          source_name: 'arxiv',
+          source_type: 'arxiv_paper',
+          source_url: 'https://arxiv.org/abs/2401.12345v1',
+          publication_date: '2024-01-22',
+          doi: '10.1103/PhysRevLett.132.010501',
+          authors: ['Alice Smith', 'Bob Chen'],
+        },
+      ],
+    },
+    verification: {
+      structurally_valid_count: 3,
+      duplicate_dois_count: 0,
+    },
+    analysis: {
+      topic: 'quantum error correction',
+      eligible_sources_count: 3,
+      excluded_sources_count: 0,
+      source_distribution: { wikipedia: 1, arxiv: 1, crossref: 1 },
+      key_themes: [{ theme: 'Fault Tolerance', frequency: 3 }],
+      evidence_backed_observations: [
+        {
+          statement: "According to 'Surface Codes Paper': Logical qubits with surface codes.",
+          source_title: 'Surface Codes Paper',
+          source_url: 'https://arxiv.org/abs/2401.12345v1',
+          source_name: 'arxiv',
+          source_type: 'arxiv_paper',
+          publication_date: '2024-01-22',
+          doi: '10.1103/PhysRevLett.132.010501',
+          authors: ['Alice Smith', 'Bob Chen'],
+          confidence: 'high',
+        },
+      ],
+    },
+    dashboard: {
+      dashboard_id: 'dash-multi-1',
+      topic: 'quantum error correction',
+      source_distribution: { wikipedia: 1, arxiv: 1, crossref: 1 },
+      themes: [{ theme: 'Fault Tolerance', name: 'Fault Tolerance', frequency: 3, evidence_count: 3 }],
+      observations: [
+        {
+          statement: "According to 'Surface Codes Paper': Logical qubits with surface codes.",
+          source_title: 'Surface Codes Paper',
+          source_url: 'https://arxiv.org/abs/2401.12345v1',
+          source_name: 'arxiv',
+          source_type: 'arxiv_paper',
+          publication_date: '2024-01-22',
+          doi: '10.1103/PhysRevLett.132.010501',
+          authors: ['Alice Smith', 'Bob Chen'],
+        },
+      ],
+    },
+  };
+
+  const summary = buildHistorySummary(multiRun);
+  assert.deepEqual(summary.sources_requested, ['wikipedia', 'arxiv', 'crossref']);
+  assert.deepEqual(summary.source_breakdown, { wikipedia: 1, arxiv: 1, crossref: 1 });
+
+  let state = {
+    currentPipeline: null,
+    latestSuccessfulRun: null,
+    selectedRunId: null,
+    runsHistory: [],
+    runDetailsById: {},
+  };
+  state = applyNewRunToState(state, multiRun);
+  const restored = selectRunInState(state, 'run-multi-1');
+
+  assert.deepEqual(getSourceDistribution(restored.currentPipeline.dashboard), {
+    wikipedia: 1,
+    arxiv: 1,
+    crossref: 1,
+  });
+  assert.equal(restored.currentPipeline.research.results[0].doi, '10.1103/PhysRevLett.132.010501');
+  assert.deepEqual(restored.currentPipeline.analysis.evidence_backed_observations[0].authors, [
+    'Alice Smith',
+    'Bob Chen',
+  ]);
+  assert.equal(restored.currentPipeline.dashboard.observations[0].publication_date, '2024-01-22');
+});
+
+test('Phase 5: buildHistorySummary preserves execution_id, origin_platform, and handoff_count', () => {
+  const phase5Run = makeRun({
+    id: 'run-p5-1',
+    query: 'agent interoperability',
+    executed_at: '2026-11-12T00:10:00Z',
+  });
+  phase5Run.execution_id = 'exec-p5-999';
+  phase5Run.shared_context = { origin_platform: 'band', query: 'agent interoperability' };
+  phase5Run.handoffs = [{ handoff_id: 'h1' }, { handoff_id: 'h2' }];
+
+  const summary = buildHistorySummary(phase5Run);
+  assert.equal(summary.execution_id, 'exec-p5-999');
+  assert.equal(summary.origin_platform, 'band');
+  assert.equal(summary.handoff_count, 2);
+});
+
+
 

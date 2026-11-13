@@ -523,3 +523,94 @@ async def test_analyst_agent_sparse_evidence_reporting():
     assert any("confidence" in lim.lower() for lim in report["limitations"])
 
 
+@pytest.mark.asyncio
+async def test_analyst_agent_multi_source_provenance_and_source_errors():
+    """Verify multi-source metadata propagation, source_distribution, and partial source_errors reporting."""
+    research = {
+        "query": "Quantum Computing",
+        "sources_requested": ["wikipedia", "arxiv", "crossref"],
+        "source_errors": {"crossref": "Crossref API rate limit exceeded (HTTP 429)."},
+        "results": [
+            {
+                "title": "Quantum computing",
+                "snippet": "Quantum computing applies superposition and entanglement for computational algorithms.",
+                "source_name": "wikipedia",
+                "source_type": "wikipedia_extract",
+                "source_url": "https://en.wikipedia.org/wiki/Quantum_computing",
+                "retrieved_at": "2026-03-01T12:00:00Z",
+                "is_weakly_relevant": False,
+            },
+            {
+                "title": "Fault-Tolerant Quantum Error Correction",
+                "snippet": "Logical qubits encoded with LDPC quantum codes achieve high fault tolerance.",
+                "source_name": "arxiv",
+                "source_type": "arxiv_paper",
+                "source_url": "https://arxiv.org/abs/2401.12345v1",
+                "publication_date": "2024-01-22",
+                "doi": "10.1103/PhysRevLett.132.010501",
+                "authors": ["Alice Smith", "Bob Chen"],
+                "retrieved_at": "2026-03-01T12:00:00Z",
+                "is_weakly_relevant": False,
+            },
+        ],
+    }
+    verification = {
+        "query": "Quantum Computing",
+        "total_results": 2,
+        "results": [
+            {
+                "index": 0,
+                "title": "Quantum computing",
+                "source_name": "wikipedia",
+                "source_url": "https://en.wikipedia.org/wiki/Quantum_computing",
+                "status": "valid",
+                "is_weakly_relevant": False,
+                "checks": {
+                    "title_valid": True,
+                    "snippet_valid": True,
+                    "https_valid": True,
+                    "domain_allowed": True,
+                    "timestamp_valid": True,
+                    "is_duplicate_url": False,
+                    "is_duplicate_title": False,
+                },
+                "errors": [],
+                "warnings": [],
+            },
+            {
+                "index": 1,
+                "title": "Fault-Tolerant Quantum Error Correction",
+                "source_name": "arxiv",
+                "source_url": "https://arxiv.org/abs/2401.12345v1",
+                "doi": "10.1103/PhysRevLett.132.010501",
+                "status": "valid",
+                "is_weakly_relevant": False,
+                "checks": {
+                    "title_valid": True,
+                    "snippet_valid": True,
+                    "https_valid": True,
+                    "domain_allowed": True,
+                    "timestamp_valid": True,
+                    "is_duplicate_url": False,
+                    "is_duplicate_title": False,
+                    "doi_valid": True,
+                    "is_duplicate_doi": False,
+                },
+                "errors": [],
+                "warnings": [],
+            },
+        ],
+    }
+
+    report = await analyze_research(research, verification)
+    assert report["eligible_sources_count"] == 2
+    assert report["source_distribution"] == {"wikipedia": 1, "arxiv": 1}
+
+    obs_by_source = {o["source_name"]: o for o in report["evidence_backed_observations"]}
+    assert obs_by_source["arxiv"]["source_type"] == "arxiv_paper"
+    assert obs_by_source["arxiv"]["publication_date"] == "2024-01-22"
+    assert obs_by_source["arxiv"]["doi"] == "10.1103/PhysRevLett.132.010501"
+    assert obs_by_source["arxiv"]["authors"] == ["Alice Smith", "Bob Chen"]
+    assert any("crossref" in g.lower() for g in report["information_gaps"])
+
+

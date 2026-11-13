@@ -11,10 +11,11 @@ Note:
     executes arbitrary code or generates unsafe HTML/JavaScript.
 """
 
+from collections import Counter
 from datetime import datetime, timezone
 import logging
 import re
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 import uuid
 
@@ -213,6 +214,43 @@ def _generate_kpi_cards(
     ]
 
 
+SOURCE_DISPLAY_LABELS = {
+    "wikipedia": ("Wikipedia", "#38BDF8"),
+    "arxiv": ("arXiv", "#A855F7"),
+    "crossref": ("Crossref", "#10B981"),
+}
+
+
+def _compute_source_distribution(
+    payload: Dict[str, Any],
+    observations: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    """Extract or derive verified source provider counts without fabrication."""
+    raw_dist = payload.get("source_distribution")
+    if isinstance(raw_dist, dict) and raw_dist:
+        cleaned: Dict[str, int] = {}
+        for k, v in raw_dist.items():
+            key = str(k).strip().lower()
+            try:
+                val = int(v)
+            except (ValueError, TypeError):
+                continue
+            if key and val > 0:
+                cleaned[key] = val
+        if cleaned:
+            return cleaned
+
+    if not observations:
+        return {}
+
+    counts = Counter(
+        str(obs.get("source_name") or "wikipedia").strip().lower()
+        for obs in observations
+        if isinstance(obs, dict)
+    )
+    return dict(counts)
+
+
 def _derive_chart_specifications(
     total_sources: int,
     eligible_sources: int,
@@ -220,14 +258,15 @@ def _derive_chart_specifications(
     key_themes: List[Dict[str, Any]],
     important_keywords: List[str],
     observations: List[Dict[str, Any]],
+    source_distribution: Optional[Dict[str, int]] = None,
 ) -> List[ChartSpec]:
     """
     Derive visual chart specifications strictly from available analysis data.
 
     Supported chart types:
     - pie: Source eligibility breakdown
+    - bar: Verified source provider distribution & keyword occurrences
     - horizontal_bar: Thematic source distribution
-    - bar: Keyword occurrences in verified snippets (disclosed heuristic)
     """
     charts: List[ChartSpec] = []
 
@@ -247,7 +286,31 @@ def _derive_chart_specifications(
             )
         )
 
-    # 2. Research Theme Distribution (Horizontal Bar Chart)
+    # 2. Multi-Source Provider Distribution (Bar Chart)
+    if source_distribution:
+        dist_points: List[ChartDataPoint] = []
+        for src_key, count in source_distribution.items():
+            if count <= 0:
+                continue
+            display_label, color = SOURCE_DISPLAY_LABELS.get(src_key, (src_key.title(), "#6366F1"))
+            dist_points.append(
+                ChartDataPoint(label=display_label, value=float(count), color=color)
+            )
+        if dist_points:
+            charts.append(
+                ChartSpec(
+                    id="chart-source-distribution",
+                    title="Verified Source Distribution by Provider",
+                    chart_type="bar",
+                    description="Exact count of eligible verified evidence records grouped by source provider.",
+                    x_axis_label="Research Provider",
+                    y_axis_label="Verified Source Count",
+                    data=dist_points,
+                    is_heuristic=False,
+                )
+            )
+
+    # 3. Research Theme Distribution (Horizontal Bar Chart)
     if len(key_themes) > 0:
         theme_data = [
             ChartDataPoint(
@@ -277,7 +340,7 @@ def _derive_chart_specifications(
             )
         )
 
-    # 3. Prominent Keyword Occurrences (Bar Chart - Heuristic Text Frequency)
+    # 4. Prominent Keyword Occurrences (Bar Chart - Heuristic Text Frequency)
     if len(important_keywords) > 0 and eligible_sources > 0:
         corpus = " ".join(str(obs.get("statement", "")).lower() for obs in observations)
         kw_data: List[ChartDataPoint] = []
@@ -353,6 +416,7 @@ async def build_dashboard(
     information_gaps = payload.get("information_gaps", [])
     recommendations = payload.get("recommendations", [])
     limitations = payload.get("limitations", [])
+    source_distribution = _compute_source_distribution(payload, raw_observations)
 
     generation_timestamp = datetime.now(timezone.utc).isoformat()
     dashboard_id = f"dash-{uuid.uuid4().hex[:12]}"
@@ -374,6 +438,7 @@ async def build_dashboard(
         key_themes=normalized_themes,
         important_keywords=important_keywords,
         observations=raw_observations,
+        source_distribution=source_distribution,
     )
 
     # Transform observations into DashboardObservation objects
@@ -385,6 +450,11 @@ async def build_dashboard(
             confidence=obs.get("confidence", "high"),
             confidence_reason=obs.get("confidence_reason"),
             is_weakly_relevant=bool(obs.get("is_weakly_relevant", False)),
+            source_name=str(obs.get("source_name") or "wikipedia").strip().lower(),
+            source_type=str(obs.get("source_type") or "wikipedia_extract").strip(),
+            publication_date=obs.get("publication_date") if isinstance(obs.get("publication_date"), str) else None,
+            doi=obs.get("doi") if isinstance(obs.get("doi"), str) else None,
+            authors=obs.get("authors") if isinstance(obs.get("authors"), list) else [],
         )
         for obs in raw_observations
     ]
@@ -398,6 +468,7 @@ async def build_dashboard(
         "generated_at": generation_timestamp,
         "executive_summary": exec_summary,
         "kpi_cards": [c.model_dump() for c in kpi_cards],
+        "source_distribution": source_distribution,
         "themes": normalized_themes,
         "key_themes": normalized_themes,
         "important_keywords": important_keywords,
@@ -410,6 +481,7 @@ async def build_dashboard(
             "schema_version": "1.0.0",
             "theme_count": len(normalized_themes),
             "observation_count": len(observations),
+            "sources_represented": sorted(source_distribution.keys()),
             "is_heuristic_clustering": True,
         },
         "render_notice": "Safe specification format for React frontend rendering. No executable code or unsafe scripts.",

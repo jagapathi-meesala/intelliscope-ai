@@ -1,0 +1,12 @@
+{
+  "verified_at": "2026-11-13T15:46:13.728942+00:00",
+  "rest_auth_passed": true,
+  "ws_connected": false,
+  "existing_host_agent_running": true,
+  "selected_chat_id": "c348c418-f3a6-467d-8601-c7453bec68e1",
+  "user_sender_key_present": false,
+  "e2e_room_roundtrip_passed": true,
+  "historical_user_messages": 10,
+  "historical_agent_replies": 12,
+  "notes": "Live room communication verified in room c348c418-f3a6-467d-8601-c7453bec68e1: user message received, 4-agent pipeline executed successfully (run 221041b0), and synthesized agent reply delivered to room."
+}

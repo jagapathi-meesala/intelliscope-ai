@@ -151,6 +151,30 @@ class DashboardObservation(BaseModel):
         default=False,
         description="Flag indicating the underlying source was classified as weakly relevant"
     )
+    source_name: str = Field(
+        default="wikipedia",
+        max_length=50,
+        description="Normalized source provider name ('wikipedia', 'arxiv', or 'crossref')"
+    )
+    source_type: str = Field(
+        default="wikipedia_extract",
+        max_length=100,
+        description="Provenance classification for the cited record"
+    )
+    publication_date: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        description="Publication date when available"
+    )
+    doi: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="Digital Object Identifier (DOI) when available"
+    )
+    authors: List[str] = Field(
+        default_factory=list,
+        description="Publication authors list when available"
+    )
 
     @field_validator("source_url")
     @classmethod
@@ -208,6 +232,10 @@ class DashboardResponse(BaseModel):
     kpi_cards: List[KPICard] = Field(
         default_factory=list,
         description="Summary KPI metric cards"
+    )
+    source_distribution: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Count of eligible verified sources grouped by provider (wikipedia, arxiv, crossref)"
     )
     themes: List[Dict[str, Any]] = Field(
         default_factory=list,

@@ -20,6 +20,27 @@ import LoadingState from '../components/common/LoadingState';
 import ErrorAlert from '../components/common/ErrorAlert';
 import AgentStatusBadge from '../components/common/AgentStatusBadge';
 
+const RESEARCH_PROVIDERS = [
+  {
+    id: 'wikipedia',
+    name: 'Wikipedia',
+    description: 'Encyclopedia articles & introductory page extracts',
+    domain: 'en.wikipedia.org',
+  },
+  {
+    id: 'arxiv',
+    name: 'arXiv',
+    description: 'Open-access academic papers & preprints (Atom XML API)',
+    domain: 'arxiv.org',
+  },
+  {
+    id: 'crossref',
+    name: 'Crossref',
+    description: 'Scholarly publication metadata, DOIs & abstracts',
+    domain: 'api.crossref.org',
+  },
+];
+
 const SUGGESTIONS = [
   'Quantum computing',
   'Neural architecture search',
@@ -41,13 +62,28 @@ export default function NewResearch() {
 
   const [topic, setTopic] = useState('');
   const [limit, setLimit] = useState(5);
+  const [selectedSources, setSelectedSources] = useState(['wikipedia']);
+
+  const toggleSource = (srcId) => {
+    setSelectedSources((prev) => {
+      if (prev.includes(srcId)) {
+        // Keep at least one selected source or allow unchecking then show validation hint
+        return prev.filter((id) => id !== srcId);
+      }
+      return [...prev, srcId];
+    });
+  };
+
+  const selectAllSources = () => {
+    setSelectedSources(RESEARCH_PROVIDERS.map((p) => p.id));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!topic.trim() || isExecuting) return;
+    if (!topic.trim() || selectedSources.length === 0 || isExecuting) return;
 
     try {
-      await startResearch(topic, limit);
+      await startResearch(topic, limit, selectedSources);
     } catch {
       // Error handled by context while preserving prior successful run
     }
@@ -100,10 +136,10 @@ export default function NewResearch() {
             <div className="flex items-center justify-between text-sm mb-2">
               <label htmlFor="limit-slider" className="font-semibold text-slate-200 flex items-center gap-1.5">
                 <Sliders className="w-4 h-4 text-brand-400" />
-                <span>Result Limit (Sources to Collect)</span>
+                <span>Result Limit (Per Selected Source)</span>
               </label>
               <span className="font-mono font-bold text-brand-400 bg-navy-950 px-2.5 py-0.5 rounded border border-slate-800">
-                {limit} {limit === 1 ? 'source' : 'sources'}
+                {limit} {limit === 1 ? 'source' : 'sources'} / provider
               </span>
             </div>
             <input
@@ -121,6 +157,59 @@ export default function NewResearch() {
               <span>Default: 5</span>
               <span>Max: 10</span>
             </div>
+          </div>
+
+          {/* Multi-Source Provider Selection */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                <Database className="w-4 h-4 text-brand-400" />
+                <span>Research Sources ({selectedSources.length} selected)</span>
+              </span>
+              <button
+                type="button"
+                disabled={isExecuting}
+                onClick={selectAllSources}
+                className="text-xs text-brand-400 hover:text-brand-300 underline font-medium"
+              >
+                Select All Sources
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {RESEARCH_PROVIDERS.map((provider) => {
+                const checked = selectedSources.includes(provider.id);
+                return (
+                  <label
+                    key={provider.id}
+                    className={`cursor-pointer p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                      checked
+                        ? 'bg-brand-950/50 border-brand-500/60 shadow-sm'
+                        : 'bg-navy-950/60 border-slate-800 hover:border-slate-700'
+                    } ${isExecuting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-white">{provider.name}</span>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isExecuting}
+                        onChange={() => toggleSource(provider.id)}
+                        className="w-4 h-4 accent-brand-500 rounded"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-snug">{provider.description}</p>
+                    <span className="text-[10px] font-mono text-slate-500">{provider.domain}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {selectedSources.length === 0 && (
+              <p className="mt-2 text-xs text-rose-400">
+                Select at least one research provider before launching the pipeline.
+              </p>
+            )}
           </div>
 
           {/* Suggested Topics */}
@@ -152,7 +241,7 @@ export default function NewResearch() {
 
             <button
               type="submit"
-              disabled={!topic.trim() || isExecuting}
+              disabled={!topic.trim() || selectedSources.length === 0 || isExecuting}
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all shadow-md shadow-brand-600/30 hover:shadow-glow-indigo active:scale-95"
             >
               <Play className="w-4 h-4 fill-current" />
@@ -188,6 +277,18 @@ export default function NewResearch() {
               <h3 className="text-lg font-bold text-white">
                 "{currentPipeline.query}"
               </h3>
+              {currentPipeline.research?.sources_requested && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {currentPipeline.research.sources_requested.map((src) => (
+                    <span
+                      key={src}
+                      className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-navy-950 text-brand-300 border border-brand-800/40"
+                    >
+                      {src}: {currentPipeline.research?.source_breakdown?.[src] ?? 0}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="text-right">

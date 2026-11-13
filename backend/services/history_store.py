@@ -13,6 +13,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Dict, List, Optional
 
+from backend.config import settings
 from backend.models.pipeline import (
     PipelineHistoryResponse,
     PipelineHistorySummary,
@@ -21,7 +22,11 @@ from backend.models.pipeline import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HISTORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "pipeline_history.json"
+DEFAULT_HISTORY_PATH = (
+    Path(settings.HISTORY_STORAGE_PATH)
+    if getattr(settings, "HISTORY_STORAGE_PATH", None)
+    else (Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "pipeline_history.json")
+)
 
 
 def _build_summary(run: PipelineResponse) -> PipelineHistorySummary:
@@ -47,9 +52,14 @@ def _build_summary(run: PipelineResponse) -> PipelineHistorySummary:
         theme_count = 0
 
     summary_text = run.summary or (run.analysis.executive_summary if run.analysis else None)
+    sources_requested = list(run.research.sources_requested) if run.research else ["wikipedia"]
+    source_breakdown = dict(run.research.source_breakdown) if run.research else {}
 
     return PipelineHistorySummary(
         pipeline_id=run.pipeline_id,
+        execution_id=run.execution_id or run.pipeline_id,
+        origin_platform=run.shared_context.origin_platform if run.shared_context else "api",
+        handoff_count=len(run.handoffs),
         query=run.query,
         status=run.status,
         executed_at=run.executed_at,
@@ -61,6 +71,8 @@ def _build_summary(run: PipelineResponse) -> PipelineHistorySummary:
         excluded_count=excluded_count,
         quality_score=quality_score,
         theme_count=theme_count,
+        sources_requested=sources_requested,
+        source_breakdown=source_breakdown,
         summary=summary_text,
     )
 

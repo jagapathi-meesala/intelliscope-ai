@@ -36,6 +36,7 @@ export default function Overview() {
     runsHistory,
     agentsFleet,
     fleetLoading,
+    integrationsStatus,
     isViewingHistoricalRun,
     selectRun,
     selectLatestRun,
@@ -97,8 +98,8 @@ export default function Overview() {
             IntelliScope AI Control Center
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed mb-4">
-            Orchestrates four autonomous agents to discover Wikipedia extracts, verify HTTPS protocol and domain compliance,
-            synthesize deterministic observations, and generate React dashboard specifications with zero hallucination.
+            Orchestrates four autonomous agents to discover multi-source evidence across Wikipedia, arXiv, and Crossref,
+            verify HTTPS protocol, domain, and DOI compliance, synthesize deterministic observations, and generate React dashboard specifications with zero hallucination.
           </p>
           {currentPipeline?.query && (
             <div className="mb-5 text-xs text-slate-300 flex flex-wrap items-center gap-2">
@@ -250,6 +251,54 @@ export default function Overview() {
           )}
         </div>
       </div>
+
+      {/* Genuine Sponsor Platform Interoperability Strip */}
+      {integrationsStatus?.platforms && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-lg font-bold text-white tracking-tight">Sponsor Platform Interoperability</h3>
+              <p className="text-xs text-slate-400">
+                Genuine runtime integration status across hackathon sponsor platforms (credentials never exposed).
+              </p>
+            </div>
+            <Link
+              to="/activity"
+              className="text-xs font-medium text-brand-400 hover:text-brand-300 underline"
+            >
+              Inspect Details &amp; Handoffs →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {Object.values(integrationsStatus.platforms).map((plat) => (
+              <div
+                key={plat.platform_id}
+                className="p-3.5 rounded-xl border border-slate-800 bg-navy-900/70 space-y-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-white truncate">{plat.display_name}</span>
+                  <span
+                    className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border shrink-0 ${
+                      plat.status === 'live_tested'
+                        ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                        : plat.status === 'implemented'
+                        ? 'bg-cyan-950/60 text-cyan-300 border-cyan-800/50'
+                        : plat.status === 'partial'
+                        ? 'bg-amber-950/60 text-amber-300 border-amber-800/50'
+                        : 'bg-slate-900 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {plat.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="text-[11px] font-mono text-slate-400 truncate">
+                  State: <span className="text-slate-200">{plat.runtime_state}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent Research Activity Section */}
       <div>

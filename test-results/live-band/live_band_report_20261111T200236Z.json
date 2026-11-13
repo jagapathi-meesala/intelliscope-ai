@@ -1,0 +1,28 @@
+{
+  "phase": "5",
+  "title": "BAND Live End-to-End Room Verification",
+  "verified_at": "2026-11-11T20:02:36.558688+00:00",
+  "credential_source": "agent_config.yaml",
+  "rest_url": "https://app.band.ai",
+  "ws_url": "wss://app.band.ai/api/v1/socket/websocket",
+  "user_sender_key_present": false,
+  "rest_auth_passed": false,
+  "agent_profile": null,
+  "selected_chat_id": null,
+  "chats_found": 0,
+  "context_messages_before": [],
+  "pending_messages_before": 0,
+  "historical_user_messages": 0,
+  "historical_agent_replies": 0,
+  "backend_ready": false,
+  "ws_connected": false,
+  "outbound_test_message_sent": false,
+  "outbound_test_message_id": null,
+  "inbound_agent_reply_observed": false,
+  "backend_pipeline_run_recorded": false,
+  "e2e_room_roundtrip_passed": false,
+  "errors": [
+    "[Errno -3] Temporary failure in name resolution"
+  ],
+  "notes": ""
+}
