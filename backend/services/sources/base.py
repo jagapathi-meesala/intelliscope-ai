@@ -50,6 +50,67 @@ RELEVANCE_LIST_PREFIXES = (
     "bibliography of",
 )
 
+# Common research intent modifiers and meta-query words that describe research activity
+# rather than domain subject matter (e.g. "healthcare AI research" -> core: healthcare, AI)
+INTENT_MODIFIER_WORDS = {
+    "research", "overview", "study", "studies", "application", "applications",
+    "applied", "survey", "review", "reviews", "analysis", "system", "systems",
+    "approach", "approaches", "methods", "method", "techniques", "technique",
+    "trends", "challenges", "future", "recent", "using", "use", "based", "role",
+    "impact", "advances", "development", "developments", "state", "art", "field",
+}
+
+# Domain concept clusters linking abbreviations, full phrases, and closely associated domain terms
+# for transparent, topic-aware matching across multi-disciplinary academic literature
+CONCEPT_CLUSTERS: List[Dict[str, Any]] = [
+    {
+        "id": "ai",
+        "terms": ["ai", "artificial intelligence", "intelligent system", "intelligent systems"],
+        "broad": ["machine learning", "deep learning", "neural network", "neural networks"],
+    },
+    {
+        "id": "ml",
+        "terms": ["ml", "machine learning"],
+        "broad": ["deep learning", "neural network", "neural networks", "artificial intelligence", "ai"],
+    },
+    {
+        "id": "deep_learning",
+        "terms": ["dl", "deep learning", "neural network", "neural networks", "deep neural", "convolutional", "cnn", "transformer", "transformers"],
+        "broad": ["machine learning", "artificial intelligence", "ai"],
+    },
+    {
+        "id": "nlp",
+        "terms": ["nlp", "natural language processing", "llm", "llms", "language model", "language models"],
+        "broad": ["artificial intelligence", "ai", "machine learning"],
+    },
+    {
+        "id": "cv",
+        "terms": ["cv", "computer vision", "image recognition", "image segmentation", "medical imaging", "image analysis"],
+        "broad": ["artificial intelligence", "ai", "machine learning", "deep learning"],
+    },
+    {
+        "id": "quantum",
+        "terms": ["quantum computing", "quantum computation", "quantum computer", "quantum computers", "quantum algorithm", "quantum algorithms", "qubit", "qubits", "quantum"],
+        "broad": [],
+    },
+    {
+        "id": "healthcare",
+        "terms": [
+            "healthcare", "health care", "health", "medical", "medicine", "clinical",
+            "hospital", "hospitals", "biomedical", "patient", "patients", "physician",
+            "physicians", "radiology", "radiologist", "radiologists", "pathology",
+            "diagnosis", "diagnostics", "diagnostic", "prognosis", "ehr", "pneumonia",
+            "disease", "clinical decision support",
+        ],
+        "broad": [],
+    },
+    {
+        "id": "genomics",
+        "terms": ["crispr", "gene editing", "genome editing", "genetic engineering", "cas9", "genomics", "dna", "rna"],
+        "broad": [],
+    },
+]
+
 
 class DataCollectorError(Exception):
     """Base exception for Data Collector Agent operations."""
@@ -156,6 +217,54 @@ def truncate_snippet(text: str, max_length: int = settings.DEFAULT_SNIPPET_LENGT
     return truncated.rstrip() + "..."
 
 
+def _stem_term(w: str) -> str:
+    """Strip common English inflectional suffixes cleanly."""
+    w = w.lower()
+    for s in ("ing", "ies", "es", "s", "ed", "al", "tion", "tive"):
+        if w.endswith(s) and len(w) > len(s) + 2:
+            return w[:-len(s)]
+    return w
+
+
+def _term_matches_text(term: str, target: str, allow_concept: bool = True) -> bool:
+    """
+    Check if a query term or its concept synonyms match the target text (title or snippet).
+    Respects word boundaries for short acronyms (e.g. AI, ML, CV, EHR).
+    """
+    t_lower = target.lower()
+    term_l = term.lower()
+
+    # 1. Exact match or word boundary check for short terms
+    if len(term_l) <= 3:
+        if re.search(r"\b" + re.escape(term_l) + r"\b", t_lower):
+            return True
+    else:
+        if term_l in t_lower:
+            return True
+        st = _stem_term(term_l)
+        if len(st) >= 4 and st in t_lower:
+            return True
+
+    # 2. Concept cluster equivalence
+    if allow_concept:
+        for c in CONCEPT_CLUSTERS:
+            c_terms = c["terms"]
+            b_terms = c.get("broad", [])
+            if any(term_l == ct or term_l in ct.split() for ct in c_terms):
+                for syn in c_terms + b_terms:
+                    if len(syn) <= 3:
+                        if re.search(r"\b" + re.escape(syn) + r"\b", t_lower):
+                            return True
+                    else:
+                        if syn in t_lower:
+                            return True
+                        st_syn = _stem_term(syn)
+                        if len(st_syn) >= 4 and st_syn in t_lower:
+                            return True
+
+    return False
+
+
 def check_source_relevance(
     query: str,
     title: str,
@@ -164,6 +273,8 @@ def check_source_relevance(
     """
     Transparently assess topical relevance of a source to the search query.
     Distinguishes directly relevant works from weakly relevant / peripheral items.
+    Uses meaningful term weighting, topic-aware matching, and concept evidence across
+    title and abstract without demanding every query word in long academic queries.
     """
     raw_words = re.findall(r"\b[a-zA-Z0-9_\-]{2,}\b", query.lower())
     query_words = [w for w in raw_words if w not in RELEVANCE_STOP_WORDS]
@@ -177,79 +288,113 @@ def check_source_relevance(
     title_lower = (title or "").lower().strip()
     snippet_lower = (snippet or "").lower().strip()
 
-    def _term_matches(term: str, target: str) -> bool:
-        if term in target:
-            return True
-        if len(term) >= 5:
-            stem = term[:4]
-            return stem in target
-        return False
-
-    title_matches = [w for w in query_words if _term_matches(w, title_lower)]
-    snippet_matches = [w for w in query_words if _term_matches(w, snippet_lower)]
-    all_matched_terms = set(title_matches).union(snippet_matches)
-
-    if len(title_matches) == 0:
-        return (
-            "weakly_relevant",
-            True,
-            (
-                f"Weakly related: Article title '{title}' contains none of the query terms "
-                f"({', '.join(query_words)}). The source appears to be an entity, person, vendor, "
-                f"or peripheral topic with incidental mention in the extract."
-            ),
-        )
-
-    is_list_title = any(title_lower.startswith(prefix) for prefix in RELEVANCE_LIST_PREFIXES)
-    if is_list_title and len(title_matches) < len(query_words):
-        missing_title_terms = [w for w in query_words if w not in title_matches]
-        return (
-            "weakly_relevant",
-            True,
-            (
-                f"Weakly related: Article is an index or list ('{title}') that lacks core query "
-                f"term(s) '{', '.join(missing_title_terms)}' in its title."
-            ),
-        )
-
-    if len(title_matches) == len(query_words):
+    # 1. Exact phrase in title (highest confidence direct match)
+    if query.lower() in title_lower:
         return (
             "relevant",
             False,
             f"Article title directly matches all query terms: {', '.join(query_words)}.",
         )
 
-    if query.lower() in title_lower:
+    # 2. Direct literal word matches in title (all terms present literally)
+    literal_title_matches = [w for w in query_words if _term_matches_text(w, title_lower, allow_concept=False)]
+    if len(literal_title_matches) == len(query_words):
         return (
             "relevant",
             False,
-            f"Article title contains exact search phrase '{query}'.",
+            f"Article title directly matches all query terms: {', '.join(query_words)}.",
         )
 
-    if len(all_matched_terms) == len(query_words):
+    # 3. Check list prefix rule (Phase 3.3 regression: index/list lacking core query topic)
+    is_list_title = any(title_lower.startswith(prefix) for prefix in RELEVANCE_LIST_PREFIXES)
+    if is_list_title:
+        missing_title = [w for w in query_words if not _term_matches_text(w, title_lower, allow_concept=True)]
+        if missing_title:
+            missing_str = ", ".join(missing_title)
+            return (
+                "weakly_relevant",
+                True,
+                (
+                    f"Weakly related: Article is an index or list ('{title}') that lacks core query "
+                    f"term(s) '{missing_str}' in its title."
+                ),
+            )
+
+    # 4. Check for completely unrelated sources (neither title nor extract contains any query terms/concepts)
+    concept_title_matches = [w for w in query_words if _term_matches_text(w, title_lower, allow_concept=True)]
+    concept_snippet_matches = [w for w in query_words if _term_matches_text(w, snippet_lower, allow_concept=True)]
+
+    if len(concept_title_matches) == 0 and len(concept_snippet_matches) == 0:
+        query_str = ", ".join(query_words)
         return (
-            "relevant",
-            False,
-            f"Source title and extract cover all key query terms ({', '.join(query_words)}).",
+            "weakly_relevant",
+            True,
+            f"Weakly related: Neither title nor extract contains query key terms ({query_str}).",
         )
 
-    if query.lower() in snippet_lower:
+    # Check for incidental entities (person, company, vendor with ZERO query terms or concepts in title)
+    if len(concept_title_matches) == 0:
+        query_str = ", ".join(query_words)
+        return (
+            "weakly_relevant",
+            True,
+            (
+                f"Weakly related: Article title '{title}' contains none of the query terms "
+                f"({query_str}). The source appears to be an entity, person, vendor, "
+                f"or peripheral topic with incidental mention in the extract."
+            ),
+        )
+
+    # 5. Partition terms into core domain terms vs intent modifier terms
+    core_terms = [w for w in query_words if w not in INTENT_MODIFIER_WORDS]
+    if not core_terms:
+        core_terms = query_words
+
+    # 6. Concept-aware matching across title and snippet
+    title_core = [w for w in core_terms if _term_matches_text(w, title_lower, allow_concept=True)]
+    snippet_core = [w for w in core_terms if _term_matches_text(w, snippet_lower, allow_concept=True)]
+    all_matched_core = set(title_core).union(snippet_core)
+
+    # If full query phrase is in snippet and title has at least one core match
+    if query.lower() in snippet_lower and len(concept_title_matches) > 0:
         return (
             "relevant",
             False,
             f"Extract contains exact search phrase '{query}' and article title aligns with core terms.",
         )
 
-    if len(query_words) == 1 and query_words[0] in title_lower:
+    # If all core terms are satisfied across title and snippet
+    if len(all_matched_core) == len(core_terms):
+        query_str = ", ".join(query_words)
         return (
             "relevant",
             False,
-            f"Source title contains primary query term '{query_words[0]}'.",
+            f"Source title and extract cover all key query terms ({query_str}).",
         )
 
-    if len(all_matched_terms) > 0:
-        matched_str = ", ".join(sorted(all_matched_terms))
-        missing = [w for w in query_words if w not in all_matched_terms]
+    # Single core term query and that core term is in title
+    if len(core_terms) == 1 and core_terms[0] in title_core:
+        return (
+            "relevant",
+            False,
+            f"Source title contains primary query term '{core_terms[0]}'.",
+        )
+
+    # For multi-term queries (>= 2 core terms), if high proportion (>= 66%) of core concepts match
+    # with evidence in both title AND snippet
+    core_ratio = len(all_matched_core) / max(1, len(core_terms))
+    if len(core_terms) >= 2 and core_ratio >= 0.66 and len(title_core) >= 1 and len(snippet_core) >= 1:
+        matched_str = ", ".join(sorted(all_matched_core))
+        return (
+            "relevant",
+            False,
+            f"Source title and extract substantiate core query concepts ({matched_str}).",
+        )
+
+    # Otherwise weakly relevant
+    if len(all_matched_core) > 0:
+        matched_str = ", ".join(sorted(all_matched_core))
+        missing = [w for w in core_terms if w not in all_matched_core]
         missing_str = ", ".join(missing)
         return (
             "weakly_relevant",
@@ -257,10 +402,11 @@ def check_source_relevance(
             f"Weakly related: Source mentions '{matched_str}' but lacks core query terms '{missing_str}'.",
         )
 
+    query_str = ", ".join(query_words)
     return (
         "weakly_relevant",
         True,
-        f"Weakly related: Neither title nor extract contains query key terms ({', '.join(query_words)}).",
+        f"Weakly related: Neither title nor extract contains query key terms ({query_str}).",
     )
 
 

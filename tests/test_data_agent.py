@@ -417,6 +417,94 @@ def test_check_source_relevance_incidental_entities_and_lists():
         assert is_weak is False
 
 
+def test_check_source_relevance_phase_7c_topic_aware_matching():
+    """
+    Phase 7C Tests:
+    1. Topic-aware matching: Handles abbreviations (AI/ML/CV), synonyms (medical/clinical for healthcare),
+       and meaningful term weighting.
+    2. Long queries: Avoids demanding every non-essential intent word (e.g. 'research', 'applications').
+    3. Partially relevant sources: Correctly categorized as weakly_relevant with clear reasons.
+    4. Unrelated sources: Correctly categorized as weakly_relevant with clear reasons.
+    """
+    # Case 1: Healthcare AI research (direct relevance via concept cluster & modifier handling)
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare AI research",
+        title="Artificial Intelligence in Medicine and Healthcare: Applications and Challenges",
+        snippet="This paper surveys machine learning models in clinical diagnostics, medical imaging, and patient care.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+    assert "cover all key query terms" in reason or "substantiate core query concepts" in reason
+
+    # Case 2: Deep learning in healthcare (synonym: deep learning for AI, healthcare in title)
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare artificial intelligence",
+        title="Deep learning in healthcare: a review",
+        snippet="Neural networks and deep learning architectures have revolutionized medical diagnostics and hospital workflows.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+
+    # Case 3: Long query with intent modifiers (does not penalize missing modifier words like 'applications')
+    rel, is_weak, reason = check_source_relevance(
+        query="applications of artificial intelligence in healthcare",
+        title="Artificial Intelligence in Healthcare: Past, Present and Future",
+        snippet="We review the clinical history, current deployment, and future prospects of medical AI systems across hospitals.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+
+    # Case 4: Academic paper title with domain-specific terminology (CheXNet)
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare artificial intelligence",
+        title="CheXNet: Radiologist-Level Pneumonia Detection on Chest X-Rays with Deep Learning",
+        snippet="We develop an algorithm that detects pneumonia from chest X-rays using deep convolutional neural networks.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+
+    # Case 5: Long academic query (6+ words) matching core concepts without needing all modifiers
+    rel, is_weak, reason = check_source_relevance(
+        query="systematic literature review of deep learning approaches for healthcare diagnostics",
+        title="Deep Learning for Clinical Diagnostics: A Survey",
+        snippet="Neural network models applied to medical diagnostics and patient prognosis.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+
+    # Case 6: Partially relevant source (mentions healthcare/spending, but zero AI/ML/computing concepts)
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare artificial intelligence",
+        title="Healthcare expenditure in OECD countries",
+        snippet="This report analyzes national health spending, hospital budgets, and public health insurance trends.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "Weakly related" in reason
+    assert "lacks core query terms" in reason
+
+    # Case 7: Partially relevant source (mentions AI/chess, but zero healthcare/medicine concepts)
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare artificial intelligence",
+        title="A Survey of Chess-Playing Artificial Intelligence",
+        snippet="An overview of minimax search algorithms, neural evaluation functions, and AlphaZero in game playing.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "Weakly related" in reason
+    assert "lacks core query terms" in reason
+
+    # Case 8: Completely unrelated source (zero concepts)
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare artificial intelligence",
+        title="Solar Panel Photovoltaic Efficiency Trends",
+        snippet="Silicon solar cells have demonstrated steady improvements in energy conversion efficiency under sunlight.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "Neither title nor extract contains query key terms" in reason
+
+
 @pytest.mark.asyncio
 async def test_fetch_page_extracts_success():
     """Verify fetch_page_extracts parses introductory extracts and resolves redirects."""
