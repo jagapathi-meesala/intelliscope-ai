@@ -50,6 +50,9 @@ export default function AIInsights() {
   const limitations = analysis.limitations || [];
   const sourceDistEntries = Object.entries(getSourceDistribution(analysis));
 
+  const directlyRelevantCount = currentPipeline?.verification?.directly_relevant_count ?? 0;
+  const weaklyRelevantCount = currentPipeline?.verification?.weakly_relevant_count ?? 0;
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -77,12 +80,20 @@ export default function AIInsights() {
               {provider}: <strong className="text-white font-bold">{count}</strong>
             </span>
           ))}
-          <span className="px-2.5 py-1 rounded-lg bg-navy-900 border border-slate-800 text-slate-300">
-            <strong className="text-emerald-400 font-bold">{analysis.eligible_sources_count}</strong> Eligible Sources
+          <span className="px-2.5 py-1 rounded-lg bg-navy-900 border border-slate-800 text-slate-300" title="Sources passing HTTPS, domain, and schema verification checks">
+            <strong className="text-emerald-400 font-bold">{analysis.eligible_sources_count}</strong> Structurally Eligible
           </span>
+          <span className="px-2.5 py-1 rounded-lg bg-navy-900 border border-slate-800 text-slate-300">
+            <strong className="text-emerald-400 font-bold">{directlyRelevantCount}</strong> Direct Relevance
+          </span>
+          {weaklyRelevantCount > 0 && (
+            <span className="px-2.5 py-1 rounded-lg bg-navy-900 border border-slate-800 text-slate-400">
+              <strong className="text-amber-400 font-bold">{weaklyRelevantCount}</strong> Weakly Relevant
+            </span>
+          )}
           {analysis.excluded_sources_count > 0 && (
             <span className="px-2.5 py-1 rounded-lg bg-navy-900 border border-slate-800 text-slate-400">
-              <strong className="text-amber-400 font-bold">{analysis.excluded_sources_count}</strong> Excluded
+              <strong className="text-rose-400 font-bold">{analysis.excluded_sources_count}</strong> Excluded
             </span>
           )}
         </div>
@@ -108,7 +119,7 @@ export default function AIInsights() {
               <Layers className="w-4 h-4 text-brand-400" />
               <span>Thematic Clusters ({themes.length})</span>
             </h3>
-            <span className="text-xs text-slate-500">Grouped across eligible evidence</span>
+            <span className="text-xs text-slate-400">Evidence citations (sources may support multiple overlapping themes)</span>
           </div>
 
           <div className="space-y-3">
@@ -124,8 +135,11 @@ export default function AIInsights() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <h4 className="text-sm font-bold text-white">{theme.theme}</h4>
-                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-navy-950 text-brand-300 border border-brand-800/40">
-                      {theme.frequency} {theme.frequency === 1 ? 'source' : 'sources'}
+                    <span
+                      className="text-xs font-mono px-2 py-0.5 rounded-full bg-navy-950 text-brand-300 border border-brand-800/40"
+                      title="Evidence citations supporting this theme (individual sources may support multiple overlapping themes)"
+                    >
+                      {theme.frequency} {theme.frequency === 1 ? 'citation' : 'citations'} (may overlap)
                     </span>
                   </div>
 
@@ -195,7 +209,10 @@ export default function AIInsights() {
             </div>
           ) : (
             observations.map((obs, idx) => {
-              const conf = (obs.confidence || 'high').toLowerCase();
+              const isWeak = Boolean(obs.is_weakly_relevant);
+              const rawConf = (obs.confidence || 'high').toLowerCase();
+              // Strictly cap weakly relevant sources to low confidence
+              const conf = isWeak ? 'low' : rawConf;
               const confStyles = {
                 high: 'bg-emerald-950/60 text-emerald-300 border-emerald-800',
                 medium: 'bg-amber-950/60 text-amber-300 border-amber-800',

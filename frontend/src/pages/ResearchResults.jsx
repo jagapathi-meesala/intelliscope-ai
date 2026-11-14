@@ -25,6 +25,13 @@ export default function ResearchResults() {
   const sourceBreakdown = research?.source_breakdown || {};
   const sourceErrors = research?.source_errors || {};
 
+  const directlyRelevantCount =
+    currentPipeline?.verification?.directly_relevant_count ??
+    results.filter((r) => !r.is_weakly_relevant && r.relevance !== 'weakly_relevant').length;
+  const weaklyRelevantCount =
+    currentPipeline?.verification?.weakly_relevant_count ??
+    results.filter((r) => r.is_weakly_relevant || r.relevance === 'weakly_relevant').length;
+
   if (!results || results.length === 0) {
     return (
       <div className="space-y-6">
@@ -61,6 +68,14 @@ export default function ResearchResults() {
             <span className="text-xs text-slate-500 font-mono">
               {results.length} {results.length === 1 ? 'record' : 'records'} retrieved
             </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">
+              {directlyRelevantCount} Directly Relevant
+            </span>
+            {weaklyRelevantCount > 0 && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/40">
+                {weaklyRelevantCount} Weakly Relevant
+              </span>
+            )}
             {Object.entries(sourceBreakdown).map(([src, cnt]) => (
               <span
                 key={src}

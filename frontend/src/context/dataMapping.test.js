@@ -440,5 +440,43 @@ test('Phase 5: buildHistorySummary preserves execution_id, origin_platform, and 
   assert.equal(summary.handoff_count, 2);
 });
 
+test('Phase 7D: dashboard integrity distinguishes structural eligibility from topical relevance and preserves execution alignment', () => {
+  const runA = makeRun({
+    id: 'run-7d-1',
+    query: 'healthcare AI research',
+    executed_at: '2026-11-15T01:00:00Z',
+    sources: 6,
+    eligible: 5,
+    themes: [
+      { name: 'Diagnostic Imaging', count: 3 },
+      { name: 'Clinical Decision Support', count: 4 }, // overlapping citations: 3 + 4 = 7 citations across 5 sources
+    ],
+  });
+  runA.verification.directly_relevant_count = 4;
+  runA.verification.weakly_relevant_count = 1;
+  runA.verification.is_factually_verified = false;
+
+  const summary = buildHistorySummary(runA);
+  assert.equal(summary.source_count, 6);
+  assert.equal(summary.eligible_count, 5);
+  assert.equal(summary.directly_relevant_count, 4);
+  assert.equal(summary.weakly_relevant_count, 1);
+  assert.equal(summary.theme_count, 2);
+
+  const kpis = getOverviewKpis(runA, [summary]);
+  assert.equal(kpis.sourcesRetrieved, 6);
+  assert.equal(kpis.eligibleSources, 5);
+  assert.equal(kpis.themeCount, 2);
+
+  // Verify normalized themes preserve evidence citation counts
+  const themes = getNormalizedThemes(runA);
+  assert.equal(themes[0].frequency, 3);
+  assert.equal(themes[1].frequency, 4);
+
+  // Epistemic boundary: is_factually_verified must be strictly false
+  assert.equal(runA.verification.is_factually_verified, false);
+});
+
+
 
 

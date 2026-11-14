@@ -51,6 +51,9 @@ export default function Overview() {
     themeCount: currentThemesCount,
   } = getOverviewKpis(currentPipeline, runsHistory);
 
+  const directlyRelevantCount = currentPipeline?.verification?.directly_relevant_count ?? 0;
+  const weaklyRelevantCount = currentPipeline?.verification?.weakly_relevant_count ?? 0;
+
   const hasActivity = totalRuns > 0 || currentPipeline !== null;
 
   const handleOpenHistoryRun = async (runId, targetPath) => {
@@ -157,10 +160,10 @@ export default function Overview() {
           variant="cyan"
         />
         <KPICard
-          label="Eligible Sources"
+          label="Structurally Eligible Sources"
           value={eligibleSources}
           unit="sources"
-          description="Sources meeting HTTPS, domain, and schema checks in active run."
+          description={`Passing HTTPS, domain, and schema checks (${directlyRelevantCount} direct, ${weaklyRelevantCount} weak topical relevance).`}
           icon={ShieldCheck}
           variant="emerald"
         />
@@ -168,7 +171,7 @@ export default function Overview() {
           label="Thematic Clusters"
           value={currentThemesCount}
           unit="themes"
-          description="Topical themes identified in active research run."
+          description="Lexical clusters from active run (supporting sources may overlap across themes)."
           icon={Layers}
           variant="amber"
         />
@@ -327,8 +330,8 @@ export default function Overview() {
                   <tr>
                     <th className="py-3 px-4">Research Query</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Sources (Eligible / Total)</th>
-                    <th className="py-3 px-4">Themes</th>
+                    <th className="py-3 px-4">Sources (Structurally Eligible / Total)</th>
+                    <th className="py-3 px-4" title="Thematic clusters synthesized from evidence (may overlap)">Themes (Overlap)</th>
                     <th className="py-3 px-4">Verification Score</th>
                     <th className="py-3 px-4">Duration</th>
                     <th className="py-3 px-4">Executed</th>
@@ -362,7 +365,12 @@ export default function Overview() {
                           <AgentStatusBadge status={run.status} size="sm" />
                         </td>
                         <td className="py-3 px-4 font-mono text-slate-400">
-                          <span className="text-emerald-400 font-semibold">{run.eligible_count}</span> / {run.source_count}
+                          <div>
+                            <span className="text-emerald-400 font-semibold">{run.eligible_count}</span> / {run.source_count}
+                            <span className="text-[10px] text-slate-500 block font-sans">
+                              {run.directly_relevant_count ?? 0} direct · {run.weakly_relevant_count ?? 0} weak
+                            </span>
+                          </div>
                         </td>
                         <td className="py-3 px-4 font-mono text-slate-300">
                           {run.theme_count ?? 0}

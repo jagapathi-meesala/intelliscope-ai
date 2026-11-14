@@ -63,6 +63,9 @@ export default function AnalyticsDashboard() {
   const themes = getNormalizedThemes(dashboard);
   const sourceDistEntries = Object.entries(getSourceDistribution(dashboard));
 
+  const directlyRelevantCount = currentPipeline?.verification?.directly_relevant_count ?? 0;
+  const weaklyRelevantCount = currentPipeline?.verification?.weakly_relevant_count ?? 0;
+
   return (
     <div className="space-y-8">
       {/* Dashboard Title & Meta */}
@@ -90,6 +93,9 @@ export default function AnalyticsDashboard() {
               {provider}: <strong className="text-white font-bold">{count}</strong>
             </span>
           ))}
+          <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-navy-900 border border-slate-800 text-slate-300">
+            <strong className="text-emerald-400 font-bold">{directlyRelevantCount}</strong> Direct · <strong className="text-amber-400 font-bold">{weaklyRelevantCount}</strong> Weak
+          </span>
           {dashboard.generated_at && (
             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
               <Calendar className="w-3.5 h-3.5 text-slate-500" />
@@ -152,14 +158,19 @@ export default function AnalyticsDashboard() {
 
       {/* Thematic Breakdown Table */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-            <Layers className="w-5 h-5 text-cyan-400" />
-            <span>Thematic Distribution ({themes.length})</span>
-          </h3>
-          <span className="text-[11px] font-mono text-amber-300/90 bg-amber-950/40 border border-amber-900/50 px-2 py-0.5 rounded">
-            Heuristic Lexical Clustering
-          </span>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+              <Layers className="w-5 h-5 text-cyan-400" />
+              <span>Thematic Distribution ({themes.length})</span>
+            </h3>
+            <span className="text-[11px] font-mono text-amber-300/90 bg-amber-950/40 border border-amber-900/50 px-2 py-0.5 rounded">
+              Heuristic Lexical Clustering
+            </span>
+          </div>
+          <p className="text-xs text-slate-400">
+            Thematic clusters synthesized from verified extracts. Evidence counts reflect citations per theme and may overlap across multiple themes.
+          </p>
         </div>
 
         {themes.length === 0 ? (
@@ -173,7 +184,7 @@ export default function AnalyticsDashboard() {
                 <tr>
                   <th className="py-3 px-4">Thematic Cluster</th>
                   <th className="py-3 px-4">Description</th>
-                  <th className="py-3 px-4 text-center">Evidence Count</th>
+                  <th className="py-3 px-4 text-center">Evidence Citations (May Overlap)</th>
                   <th className="py-3 px-4">Supporting Evidence URLs</th>
                 </tr>
               </thead>
@@ -215,34 +226,45 @@ export default function AnalyticsDashboard() {
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {observations.map((obs, idx) => (
-              <div
-                key={idx}
-                className="p-5 rounded-2xl border border-slate-800 bg-navy-900/80 space-y-2.5 flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-navy-950 text-slate-300 border border-slate-800">
-                        {obs.confidence || 'high'} confidence
-                      </span>
-                      {obs.source_name && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-950/60 text-brand-300 border border-brand-800/40">
-                          {obs.source_name}
+            {observations.map((obs, idx) => {
+              const obsIsWeak = Boolean(obs.is_weakly_relevant);
+              const rawConf = (obs.confidence || 'high').toLowerCase();
+              // Strictly cap weakly relevant sources to low confidence
+              const obsConfidence = obsIsWeak ? 'low' : rawConf;
+              const confStyles = {
+                high: 'bg-emerald-950/60 text-emerald-300 border-emerald-800',
+                medium: 'bg-amber-950/60 text-amber-300 border-amber-800',
+                low: 'bg-slate-800 text-slate-300 border-slate-700',
+              }[obsConfidence] || 'bg-slate-800 text-slate-300 border-slate-700';
+
+              return (
+                <div
+                  key={idx}
+                  className="p-5 rounded-2xl border border-slate-800 bg-navy-900/80 space-y-2.5 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${confStyles}`}>
+                          {obsConfidence} confidence
                         </span>
-                      )}
-                      {obs.source_type && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-navy-950 text-slate-400 border border-slate-800">
-                          {obs.source_type}
+                        {obs.source_name && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-950/60 text-brand-300 border border-brand-800/40">
+                            {obs.source_name}
+                          </span>
+                        )}
+                        {obs.source_type && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-navy-950 text-slate-400 border border-slate-800">
+                            {obs.source_type}
+                          </span>
+                        )}
+                      </div>
+                      {obsIsWeak && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/60">
+                          Weakly Relevant
                         </span>
                       )}
                     </div>
-                    {obs.is_weakly_relevant && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/60">
-                        Weakly Relevant
-                      </span>
-                    )}
-                  </div>
                   <p className="text-xs text-slate-200 leading-relaxed font-medium">
                     {obs.statement || 'No statement recorded.'}
                   </p>
@@ -280,8 +302,9 @@ export default function AnalyticsDashboard() {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
         </div>
       )}
 

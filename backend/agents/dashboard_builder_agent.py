@@ -192,10 +192,10 @@ def _generate_kpi_cards(
         ),
         KPICard(
             id="kpi-eligible-sources",
-            label="Eligible Verified Sources",
+            label="Structurally Eligible Sources",
             value=eligible_sources,
             unit="sources",
-            description="Sources passing all structural, HTTPS, and domain verification checks.",
+            description="Sources passing structural, HTTPS, and domain verification (structural eligibility, not factual verification).",
         ),
         KPICard(
             id="kpi-excluded-sources",
@@ -209,7 +209,7 @@ def _generate_kpi_cards(
             label="Identified Themes",
             value=theme_count,
             unit="themes",
-            description="Thematic research clusters synthesized from verified evidence.",
+            description="Thematic research clusters synthesized from verified evidence (supporting sources may overlap across themes).",
         ),
     ]
 
@@ -277,7 +277,7 @@ def _derive_chart_specifications(
                 id="chart-source-eligibility",
                 title="Source Evidence Eligibility Breakdown",
                 chart_type="pie",
-                description="Proportion of candidate sources eligible for evidence synthesis versus excluded records.",
+                description="Proportion of candidate sources structurally eligible for evidence synthesis versus excluded records.",
                 data=[
                     ChartDataPoint(label="Eligible Sources", value=float(eligible_sources), color="#10B981"),
                     ChartDataPoint(label="Excluded / Duplicates", value=float(excluded_sources), color="#EF4444"),
@@ -330,10 +330,10 @@ def _derive_chart_specifications(
                 title="Research Theme Distribution",
                 chart_type="horizontal_bar",
                 description=(
-                    "Heuristic thematic clusters derived from lexical analysis of verified source snippets, "
-                    "representing snippet coverage count per cluster."
+                    "Heuristic thematic clusters derived from lexical analysis of verified source snippets. "
+                    "Counts represent evidence citations per theme; individual sources may support multiple overlapping themes."
                 ),
-                x_axis_label="Source Count",
+                x_axis_label="Evidence Citations (May Overlap)",
                 y_axis_label="Research Theme",
                 data=theme_data,
                 is_heuristic=True,
@@ -442,22 +442,28 @@ async def build_dashboard(
     )
 
     # Transform observations into DashboardObservation objects
-    observations = [
-        DashboardObservation(
-            statement=obs.get("statement", ""),
-            source_title=obs.get("source_title", "Untitled Source"),
-            source_url=obs.get("source_url", ""),
-            confidence=obs.get("confidence", "high"),
-            confidence_reason=obs.get("confidence_reason"),
-            is_weakly_relevant=bool(obs.get("is_weakly_relevant", False)),
-            source_name=str(obs.get("source_name") or "wikipedia").strip().lower(),
-            source_type=str(obs.get("source_type") or "wikipedia_extract").strip(),
-            publication_date=obs.get("publication_date") if isinstance(obs.get("publication_date"), str) else None,
-            doi=obs.get("doi") if isinstance(obs.get("doi"), str) else None,
-            authors=obs.get("authors") if isinstance(obs.get("authors"), list) else [],
+    # Ensure weakly relevant sources are strictly capped to 'low' confidence
+    observations = []
+    for obs in raw_observations:
+        obs_is_weak = bool(obs.get("is_weakly_relevant", False))
+        obs_conf = "low" if obs_is_weak else str(obs.get("confidence", "high")).strip().lower()
+        if obs_is_weak and obs_conf == "high":
+            obs_conf = "low"
+        observations.append(
+            DashboardObservation(
+                statement=obs.get("statement", ""),
+                source_title=obs.get("source_title", "Untitled Source"),
+                source_url=obs.get("source_url", ""),
+                confidence=obs_conf,
+                confidence_reason=obs.get("confidence_reason"),
+                is_weakly_relevant=obs_is_weak,
+                source_name=str(obs.get("source_name") or "wikipedia").strip().lower(),
+                source_type=str(obs.get("source_type") or "wikipedia_extract").strip(),
+                publication_date=obs.get("publication_date") if isinstance(obs.get("publication_date"), str) else None,
+                doi=obs.get("doi") if isinstance(obs.get("doi"), str) else None,
+                authors=obs.get("authors") if isinstance(obs.get("authors"), list) else [],
+            )
         )
-        for obs in raw_observations
-    ]
 
     result = {
         "dashboard_id": dashboard_id,
