@@ -4,7 +4,7 @@ import { CheckCircle2, XCircle, AlertTriangle, Clock, Activity, MinusCircle } fr
 export default function AgentStatusBadge({ status, label, showIcon = true, size = 'md' }) {
   const normStatus = String(status || '').toLowerCase();
 
-  let styles = 'bg-slate-800 text-slate-300 border-slate-700';
+  let styles = 'bg-slate-100 text-slate-700 border-slate-200';
   let Icon = MinusCircle;
   let text = label || status || 'Unknown';
 
@@ -14,7 +14,7 @@ export default function AgentStatusBadge({ status, label, showIcon = true, size 
     case 'success':
     case 'passed':
     case 'valid':
-      styles = 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80 shadow-sm shadow-emerald-950/50';
+      styles = 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-xs font-semibold';
       Icon = CheckCircle2;
       text = label || (normStatus === 'operational' ? 'Operational' : 'Completed');
       break;
@@ -22,7 +22,7 @@ export default function AgentStatusBadge({ status, label, showIcon = true, size 
     case 'passed_with_warnings':
     case 'warning':
     case 'weakly_relevant':
-      styles = 'bg-amber-950/60 text-amber-300 border-amber-800/80 shadow-sm shadow-amber-950/50';
+      styles = 'bg-amber-50 text-amber-800 border-amber-200 shadow-xs font-semibold';
       Icon = AlertTriangle;
       text = label || (normStatus === 'weakly_relevant' ? 'Weakly Related' : 'Passed w/ Warnings');
       break;
@@ -30,26 +30,26 @@ export default function AgentStatusBadge({ status, label, showIcon = true, size 
     case 'failed':
     case 'invalid':
     case 'error':
-      styles = 'bg-rose-950/60 text-rose-300 border-rose-800/80 shadow-sm shadow-rose-950/50';
+      styles = 'bg-rose-50 text-rose-800 border-rose-200 shadow-xs font-semibold';
       Icon = XCircle;
       text = label || 'Failed';
       break;
 
     case 'running':
     case 'executing':
-      styles = 'bg-indigo-950/60 text-indigo-300 border-indigo-700 animate-pulse shadow-sm shadow-indigo-950/50';
+      styles = 'bg-[#EEF2FF] text-[#4F46E5] border-indigo-200 animate-pulse shadow-xs font-semibold';
       Icon = Activity;
       text = label || 'Executing...';
       break;
 
     case 'skipped':
-      styles = 'bg-slate-800/80 text-slate-400 border-slate-700/80';
+      styles = 'bg-slate-100 text-[#334155] border-[#E2E8F0] font-medium';
       Icon = Clock;
       text = label || 'Skipped';
       break;
 
     default:
-      styles = 'bg-navy-800 text-slate-300 border-slate-700';
+      styles = 'bg-slate-100 text-[#334155] border-[#E2E8F0] font-medium';
       Icon = MinusCircle;
       text = label || status;
   }

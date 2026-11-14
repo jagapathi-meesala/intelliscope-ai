@@ -98,20 +98,20 @@ export default function NewResearch() {
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Page Header */}
       <div>
-        <h2 className="text-2xl font-bold text-white tracking-tight mb-1">
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">
           Initiate Autonomous Multi-Agent Research
         </h2>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-500">
           Submits a research topic to the unified FastAPI pipeline. Results pass through all 4 agents deterministically.
         </p>
       </div>
 
       {/* Research Query Input Form */}
-      <div className="p-6 sm:p-8 rounded-2xl border border-slate-800 bg-navy-900/90 shadow-card">
+      <div className="p-6 sm:p-8 rounded-2xl border border-slate-200 bg-white shadow-sm">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Topic Input */}
           <div>
-            <label htmlFor="topic-input" className="block text-sm font-semibold text-slate-200 mb-2">
+            <label htmlFor="topic-input" className="block text-sm font-semibold text-slate-800 mb-2">
               Research Topic or Query
             </label>
             <div className="relative">
@@ -124,9 +124,9 @@ export default function NewResearch() {
                 maxLength={300}
                 required
                 disabled={isExecuting}
-                className="w-full px-4 py-3.5 rounded-xl bg-navy-950 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm transition-all"
+                className="w-full px-4 py-3.5 rounded-xl bg-white border border-[#CBD5E1] text-[#0F172A] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-transparent text-sm transition-all"
               />
-              <div className="absolute right-3 top-3.5 text-xs font-mono text-slate-500">
+              <div className="absolute right-3 top-3.5 text-xs font-mono text-slate-400">
                 {topic.length}/300
               </div>
             </div>
@@ -135,11 +135,11 @@ export default function NewResearch() {
           {/* Result Limit Slider */}
           <div>
             <div className="flex items-center justify-between text-sm mb-2">
-              <label htmlFor="limit-slider" className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <Sliders className="w-4 h-4 text-brand-400" />
+              <label htmlFor="limit-slider" className="font-semibold text-slate-800 flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-indigo-600" />
                 <span>Result Limit (Per Selected Source)</span>
               </label>
-              <span className="font-mono font-bold text-brand-400 bg-navy-950 px-2.5 py-0.5 rounded border border-slate-800">
+              <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded border border-indigo-200">
                 {limit} {limit === 1 ? 'source' : 'sources'} / provider
               </span>
             </div>
@@ -151,9 +151,9 @@ export default function NewResearch() {
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
               disabled={isExecuting}
-              className="w-full h-2 bg-navy-950 rounded-lg appearance-none cursor-pointer accent-brand-500"
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
             />
-            <div className="flex justify-between text-[11px] text-slate-500 font-mono mt-1">
+            <div className="flex justify-between text-[11px] text-slate-400 font-mono mt-1">
               <span>Min: 1</span>
               <span>Default: 5</span>
               <span>Max: 10</span>
@@ -163,15 +163,15 @@ export default function NewResearch() {
           {/* Multi-Source Provider Selection */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
-                <Database className="w-4 h-4 text-brand-400" />
+              <span className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                <Database className="w-4 h-4 text-indigo-600" />
                 <span>Research Sources ({selectedSources.length} selected)</span>
               </span>
               <button
                 type="button"
                 disabled={isExecuting}
                 onClick={selectAllSources}
-                className="text-xs text-brand-400 hover:text-brand-300 underline font-medium"
+                className="text-xs text-indigo-600 hover:text-indigo-800 underline font-semibold"
               >
                 Select All Sources
               </button>
@@ -185,29 +185,29 @@ export default function NewResearch() {
                     key={provider.id}
                     className={`cursor-pointer p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
                       checked
-                        ? 'bg-brand-950/50 border-brand-500/60 shadow-sm'
-                        : 'bg-navy-950/60 border-slate-800 hover:border-slate-700'
+                        ? 'bg-[#EEF2FF] border-[#4F46E5] shadow-sm'
+                        : 'bg-white border-[#E2E8F0] hover:border-[#CBD5E1]'
                     } ${isExecuting ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-bold text-white">{provider.name}</span>
+                      <span className="text-sm font-bold text-[#0F172A]">{provider.name}</span>
                       <input
                         type="checkbox"
                         checked={checked}
                         disabled={isExecuting}
                         onChange={() => toggleSource(provider.id)}
-                        className="w-4 h-4 accent-brand-500 rounded"
+                        className="w-4 h-4 accent-[#4F46E5] rounded"
                       />
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-snug">{provider.description}</p>
-                    <span className="text-[10px] font-mono text-slate-500">{provider.domain}</span>
+                    <p className="text-[11px] text-[#64748B] leading-snug">{provider.description}</p>
+                    <span className="text-[10px] font-mono text-[#64748B]">{provider.domain}</span>
                   </label>
                 );
               })}
             </div>
 
             {selectedSources.length === 0 && (
-              <p className="mt-2 text-xs text-rose-400">
+              <p className="mt-2 text-xs text-rose-600 font-medium">
                 Select at least one research provider before launching the pipeline.
               </p>
             )}
@@ -215,8 +215,8 @@ export default function NewResearch() {
 
           {/* Suggested Topics */}
           <div>
-            <div className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+            <div className="text-xs font-semibold text-[#64748B] mb-2 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#4F46E5]" />
               <span>Suggested Research Topics</span>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -226,7 +226,7 @@ export default function NewResearch() {
                   type="button"
                   disabled={isExecuting}
                   onClick={() => handleSuggestionClick(sug)}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-navy-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-[#334155] hover:text-[#0F172A] border border-[#CBD5E1] font-medium transition-colors shadow-xs"
                 >
                   {sug}
                 </button>
@@ -236,19 +236,19 @@ export default function NewResearch() {
 
           {/* Backend Health Alert Notice */}
           {!backendHealth?.healthy && !backendHealth?.checking && (
-            <div className="p-3.5 rounded-xl border border-rose-900/60 bg-rose-950/40 text-xs text-rose-300 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-800 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
               <span>
                 FastAPI backend is currently offline or waking from sleep. Research requests will be enabled once the server responds at{' '}
-                <code className="font-mono text-rose-200">{API_BASE_URL}</code>.
+                <code className="font-mono text-rose-900 font-semibold">{API_BASE_URL}</code>.
               </span>
             </div>
           )}
 
           {/* Submit Action */}
-          <div className="pt-2 flex items-center justify-between gap-4 border-t border-slate-800">
-            <div className="text-xs text-slate-500">
-              Endpoint: <code className="font-mono text-slate-400">POST /pipeline</code>
+          <div className="pt-2 flex items-center justify-between gap-4 border-t border-[#E2E8F0]">
+            <div className="text-xs text-[#64748B] font-mono">
+              Endpoint: <code className="font-mono text-[#334155] bg-slate-100 px-1 py-0.5 rounded border border-[#E2E8F0]">POST /pipeline</code>
             </div>
 
             <button
@@ -271,7 +271,7 @@ export default function NewResearch() {
                   ? 'Select at least one research source'
                   : 'Execute autonomous multi-agent pipeline'
               }
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all shadow-md shadow-brand-600/30 hover:shadow-glow-indigo active:scale-95"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all shadow-sm active:scale-95"
             >
               <Play className="w-4 h-4 fill-current" />
               <span>
@@ -302,16 +302,16 @@ export default function NewResearch() {
 
       {/* Real-time Agent Execution Breakdown (Once Executed) */}
       {currentPipeline && !isExecuting && (
-        <div className="p-6 rounded-2xl border border-slate-800 bg-navy-900/80 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">
+                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
                   Active Execution Breakdown
                 </span>
                 <AgentStatusBadge status={currentPipeline.status} size="sm" />
               </div>
-              <h3 className="text-lg font-bold text-white">
+              <h3 className="text-lg font-bold text-slate-900">
                 "{currentPipeline.query}"
               </h3>
               {currentPipeline.research?.sources_requested && (
@@ -319,7 +319,7 @@ export default function NewResearch() {
                   {currentPipeline.research.sources_requested.map((src) => (
                     <span
                       key={src}
-                      className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-navy-950 text-brand-300 border border-brand-800/40"
+                      className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 font-semibold"
                     >
                       {src}: {currentPipeline.research?.source_breakdown?.[src] ?? 0}
                     </span>
@@ -330,7 +330,7 @@ export default function NewResearch() {
 
             <div className="text-right">
               <span className="text-xs text-slate-500 font-mono block">Total Fleet Duration</span>
-              <span className="text-sm font-mono font-bold text-white">
+              <span className="text-sm font-mono font-bold text-slate-900">
                 {((currentPipeline.total_duration_ms || 0) / 1000).toFixed(2)}s
               </span>
             </div>
@@ -348,16 +348,16 @@ export default function NewResearch() {
               return (
                 <div
                   key={key}
-                  className="p-4 rounded-xl border border-slate-800 bg-navy-950/70 flex flex-col justify-between"
+                  className="p-4 rounded-xl border border-[#E2E8F0] bg-white flex flex-col justify-between shadow-xs"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-lg bg-navy-900 border border-slate-800 text-brand-400">
+                      <div className="p-2 rounded-lg bg-[#EEF2FF] border border-[#E2E8F0] text-[#4F46E5] shadow-xs">
                         <Icon className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-white">{name}</h4>
-                        <div className="text-[11px] font-mono text-slate-500">
+                        <h4 className="text-xs font-bold text-[#0F172A]">{name}</h4>
+                        <div className="text-[11px] font-mono text-[#64748B]">
                           {duration > 0 ? `${(duration / 1000).toFixed(3)}s` : '0.000s'}
                         </div>
                       </div>
@@ -365,12 +365,12 @@ export default function NewResearch() {
                     <AgentStatusBadge status={status} size="sm" />
                   </div>
 
-                  <p className="text-xs text-slate-300 mt-2 font-mono bg-navy-900/60 p-2 rounded border border-slate-800/60">
+                  <p className="text-xs text-[#334155] mt-2 font-mono bg-[#F8FAFC] p-2.5 rounded-lg border border-[#E2E8F0] leading-relaxed">
                     {details}
                   </p>
 
                   {error && (
-                    <p className="text-xs text-rose-400 mt-2 font-mono bg-rose-950/40 p-2 rounded border border-rose-900/60">
+                    <p className="text-xs text-rose-700 mt-2 font-mono bg-rose-50 p-2.5 rounded-lg border border-rose-200">
                       Error: {error}
                     </p>
                   )}
@@ -380,35 +380,35 @@ export default function NewResearch() {
           </div>
 
           {/* Quick Navigation into Specialized Views */}
-          <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800">
-            <span className="text-xs text-slate-400">
+          <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-[#E2E8F0]">
+            <span className="text-xs text-[#64748B]">
               Pipeline run complete. Explore synthesized insights:
             </span>
             <div className="flex flex-wrap gap-2">
               <Link
                 to="/results"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy-800 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-[#334155] text-xs font-semibold border border-[#CBD5E1] shadow-xs"
               >
                 <span>Sources ({currentPipeline?.research?.result_count || 0})</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
               <Link
                 to="/verification"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy-800 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-[#334155] text-xs font-semibold border border-[#CBD5E1] shadow-xs"
               >
                 <span>Verification Audit</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
               <Link
                 to="/insights"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy-800 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-[#334155] text-xs font-semibold border border-[#CBD5E1] shadow-xs"
               >
                 <span>AI Insights</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
               <Link
                 to="/dashboard"
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-sm shadow-brand-500/30"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold shadow-sm"
               >
                 <span>View Dashboard</span>
                 <ArrowRight className="w-3.5 h-3.5" />

@@ -4,18 +4,10 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        navy: {
-          950: '#060a12',
-          900: '#0a101d',
-          850: '#0f172a',
-          800: '#15203b',
-          700: '#1e2c4f',
-          600: '#2c3e6b',
-        },
+        lavender: '#EEF2FF',
         brand: {
           50: '#eef2ff',
           100: '#e0e7ff',
@@ -39,9 +31,10 @@ export default {
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       boxShadow: {
-        'glow-indigo': '0 0 25px -5px rgba(99, 102, 241, 0.25)',
-        'glow-cyan': '0 0 25px -5px rgba(6, 182, 212, 0.25)',
-        'card': '0 4px 20px -2px rgba(0, 0, 0, 0.5)',
+        'glow-indigo': '0 0 20px -5px rgba(79, 70, 229, 0.15)',
+        'glow-cyan': '0 0 20px -5px rgba(6, 182, 212, 0.15)',
+        'card': '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03)',
+        'card-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.03)',
       }
     },
   },

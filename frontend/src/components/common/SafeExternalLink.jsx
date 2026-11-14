@@ -24,7 +24,7 @@ export default function SafeExternalLink({
 
   if (!isHttps) {
     return (
-      <span className={`inline-flex items-center gap-1 text-rose-400 font-mono text-xs ${className}`}>
+      <span className={`inline-flex items-center gap-1 text-rose-600 font-mono text-xs ${className}`}>
         <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
         <span>Insecure URL ({displayText || href})</span>
       </span>
@@ -36,7 +36,7 @@ export default function SafeExternalLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center gap-1.5 text-brand-400 hover:text-brand-300 underline underline-offset-2 hover:underline transition-colors focus:outline-none focus:ring-1 focus:ring-brand-400 rounded-sm ${className}`}
+      className={`inline-flex items-center gap-1.5 text-[#4F46E5] hover:text-[#4338CA] underline underline-offset-2 hover:underline transition-colors focus:outline-none focus:ring-1 focus:ring-[#4F46E5] rounded-sm font-medium ${className}`}
       title={`Open ${href} in new secure tab`}
     >
       <span className="truncate">{displayText || href}</span>

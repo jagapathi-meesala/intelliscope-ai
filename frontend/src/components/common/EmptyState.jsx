@@ -10,20 +10,20 @@ export default function EmptyState({
   icon: Icon = Compass,
 }) {
   return (
-    <div className="flex flex-col items-center justify-center p-12 text-center rounded-2xl border border-dashed border-slate-800 bg-navy-900/40 my-6">
-      <div className="w-16 h-16 rounded-2xl bg-brand-950/80 border border-brand-800/40 flex items-center justify-center text-brand-400 mb-5 shadow-glow-indigo">
+    <div className="flex flex-col items-center justify-center p-12 text-center rounded-2xl border border-dashed border-slate-300 bg-white shadow-sm my-6">
+      <div className="w-16 h-16 rounded-2xl bg-[#EEF2FF] border border-[#CBD5E1] flex items-center justify-center text-[#4F46E5] mb-5 shadow-sm">
         <Icon className="w-8 h-8" />
       </div>
 
-      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-      <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
+      <h3 className="text-lg font-bold text-[#0F172A] mb-2">{title}</h3>
+      <p className="text-sm text-[#64748B] max-w-md mb-6 leading-relaxed">
         {description}
       </p>
 
       {actionText && actionTo && (
         <Link
           to={actionTo}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm transition-all shadow-md shadow-brand-600/25 hover:shadow-glow-indigo active:scale-95"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold text-sm transition-all shadow-sm active:scale-95"
         >
           <span>{actionText}</span>
           <ArrowRight className="w-4 h-4" />
