@@ -2,34 +2,89 @@
 
 ### Autonomous Multi-Agent Research & Intelligence Platform
 
-IntelliScope AI is a multi-agent research platform that collects, verifies, analyzes, and transforms information into interactive dashboards.
+> **Diwali Festiverse Hackathon Submission**  
+> **Track:** Research — Data & Build  
+> **GitHub Repository:** [https://github.com/jagapathi-meesala/intelliscope-ai](https://github.com/jagapathi-meesala/intelliscope-ai)  
+> **Live Web Application:** [https://intelliscope-frontend.onrender.com](https://intelliscope-frontend.onrender.com)  
+> **Live FastAPI Backend:** [https://intelliscope-backend.onrender.com](https://intelliscope-backend.onrender.com)  
+> **API Health Check:** [https://intelliscope-backend.onrender.com/health](https://intelliscope-backend.onrender.com/health)  
+> **Interactive Swagger Documentation:** [https://intelliscope-backend.onrender.com/docs](https://intelliscope-backend.onrender.com/docs)  
+> **System Architecture Guide:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)  
+> **3-Minute Demonstration Script:** [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)  
+> **Final Submission Checklist:** [docs/SUBMISSION_CHECKLIST.md](docs/SUBMISSION_CHECKLIST.md)
 
-## Project Track
-Research — Data & Build
+---
 
-## Agents
+## Problem Statement
 
-1. **Data Collector Agent** (Operational) — Asynchronously collects research from configurable external sources via modular clients in `backend/services/sources/`:
-   - **Wikipedia** (`https://en.wikipedia.org/w/api.php`) — Default source; introductory extracts and sanitized search snippets.
+Researchers, engineers, and technical analysts face two mounting challenges in the era of artificial intelligence:
+1. **Information Overload & Disparate Repositories**: Scholarly research is fragmented across encyclopedia overviews, preprint servers, and journal registries, requiring tedious manual aggregation.
+2. **Generative Hallucinations & Fabricated Evidence**: LLM-based summarizers frequently invent citations, misattribute quotes, and present unverified speculative assertions as factual truth with no audit trail.
+
+## Proposed Solution
+
+**IntelliScope AI** solves this by decoupling the research workflow into four cooperative, specialized autonomous agents with rigorous provenance tracking:
+- **Multi-Source Data Ingestion**: Asynchronously gathers structured research from Wikipedia, arXiv, and Crossref with round-robin normalization and graceful partial failure isolation.
+- **Structural Integrity Verification**: Enforces HTTPS protocols, domain whitelists, DOI syntax validation, and cross-batch deduplication—while explicitly marking `is_factually_verified = false` so structural integrity is never confused with empirical truth.
+- **Deterministic Insight Analysis**: Discards unverified records and performs transparent lexical extraction and thematic clustering with direct source citations and explicit disclosures of knowledge gaps.
+- **Safe Declarative Dashboard Generation**: Produces validated, safe JSON specifications rendered deterministically by a modern React UI (Recharts visualizations, KPI cards, and observations) with zero executable script injection.
+- **Multi-Channel Interoperability**: Accessible via a browser SPA, a live BAND collaboration room worker, and a Model Context Protocol (MCP) server for desktop agent integration.
+
+---
+
+## Four-Agent Architecture
+
+The core intelligence platform is driven by four modular agents:
+
+1. **Data Collector Agent (`DataCollectorAgent`)** (Operational) — Asynchronously collects research from configurable external sources via modular clients in `backend/services/sources/`:
+   - **Wikipedia** (`https://en.wikipedia.org/w/api.php`) — Introductory page extracts and sanitized search snippets.
    - **arXiv** (`https://export.arxiv.org/api/query`) — Academic preprints with Atom XML parsing, abstracts, authors, publication dates, and optional DOIs.
    - **Crossref** (`https://api.crossref.org/works`) — Scholarly publication metadata with DOIs, authors, publication dates, and JATS-cleaned abstracts or honest metadata fallbacks.
-2. **Research Verification Agent** (Operational) — Validates structural integrity, HTTPS protocol compliance, source-aware domain whitelists (`*.wikipedia.org`, `arxiv.org`, `doi.org`), DOI syntax & cross-batch DOI deduplication, URL/title deduplication, and ISO timestamps. Computes transparent quality scores while explicitly distinguishing structural validity from factual accuracy.
-3. **Insight Analyst Agent** (Operational) — Performs explainable, deterministic text analysis, keyword extraction, source-modality breakdown (`source_distribution`), and theme clustering strictly on verified evidence. Grounds all observations with source provenance (`source_name`, `source_type`, `publication_date`, `doi`, `authors`) and discloses partial source errors, information gaps, and methodology limitations without hallucination or LLM extrapolation.
-4. **Dashboard Builder Agent** (Operational) — Converts the Insight Analyst Agent's structured output into a safe, validated dashboard specification JSON containing executive summaries, KPI metric cards, thematic clusters, source-distribution charts (`chart-source-distribution`), evidence citations, and chart specifications suitable for frontend rendering without executing unsafe code.
+2. **Research Verification Agent (`VerificationAgent`)** (Operational) — Validates structural integrity, HTTPS protocol compliance, source-aware domain whitelists (`*.wikipedia.org`, `arxiv.org`, `doi.org`), DOI syntax & cross-batch deduplication, URL/title deduplication, and ISO timestamps. Computes transparent quality scores (0–100) while explicitly distinguishing structural validity from factual accuracy.
+3. **Insight Analyst Agent (`InsightAnalystAgent`)** (Operational) — Performs explainable, deterministic text analysis, keyword extraction, source-modality breakdown (`source_distribution`), and theme clustering strictly on verified evidence. Grounds all observations with source provenance (`source_name`, `source_type`, `publication_date`, `doi`, `authors`) and discloses partial source errors, information gaps, and methodology limitations without hallucination or LLM extrapolation.
+4. **Dashboard Builder Agent (`DashboardBuilderAgent`)** (Operational) — Converts the Insight Analyst Agent's structured output into a safe, validated dashboard specification JSON containing executive summaries, KPI metric cards, thematic clusters, source-distribution charts, evidence citations, and chart specifications suitable for frontend rendering without executing unsafe code.
+
+---
+
+## Multi-Source Research Workflow
+
+```
+[User Query]
+     │
+     ▼
+┌─────────────────────────┐
+│  Data Collector Agent   │  Async HTTP (Wikipedia, arXiv, Crossref)
+│  (Multi-Source Client)  │  Round-robin balancing, partial failure isolation in source_errors
+└────────────┬────────────┘
+             │ Candidate Records
+             ▼
+┌─────────────────────────┐
+│ Research Verification   │  Structural validity checks, HTTPS, domain whitelist,
+│        Agent            │  DOI syntax, deduplication, quality score (is_factually_verified=false)
+└────────────┬────────────┘
+             │ Structurally Verified Evidence
+             ▼
+┌─────────────────────────┐
+│  Insight Analyst Agent  │  Deterministic lexical extraction, theme clustering,
+│ (Explainable Synthesis) │  canonical URL citations, information gap identification
+└────────────┬────────────┘
+             │ Analysis Synthesis Payload
+             ▼
+┌─────────────────────────┐
+│ Dashboard Builder Agent │  Compiles declarative JSON spec: KPIs, theme citations,
+│ (Safe Specification)    │  Recharts specs, and observations (caps weak evidence to low confidence)
+└─────────────────────────┘
+```
+
+---
 
 ## Technology Stack
 
-- Python 3.12+
-- FastAPI & Uvicorn
-- Pydantic v2
-- HTTPX (Asynchronous HTTP)
-- Pytest & Pytest-asyncio
-- React (Frontend)
-- BAND
-- Lyzr
-- Finch
-- AdaL
-- Agent37
+- **Backend**: Python 3.12+, FastAPI, Uvicorn, Pydantic v2, HTTPX (asynchronous networking), Pytest & Pytest-asyncio
+- **Frontend**: React 18, Vite, Tailwind CSS, Lucide React, Recharts (declarative visual charts)
+- **Protocols & Standards**: Model Context Protocol (MCP JSON-RPC 2.0 stdio), REST API, Phoenix WebSocket (`band-sdk==6.0.1`)
+- **Hosting & Infrastructure**: Render Static Site (Frontend SPA), Render Free Web Service (FastAPI Backend), Local Ubuntu Host (Persistent BAND Collector Daemon)
+- **Sponsor Platforms**: BAND, Finch, Lyzr, AdaL, Agent37
 
 ## Core Features
 
@@ -738,6 +793,60 @@ Executes the unified, end-to-end 4-agent intelligence workflow sequentially with
 
 ---
 
+### 8. Pipeline History & Shared State
+
+#### `GET /pipeline/history`
+Retrieves retained pipeline execution history ordered newest-first, providing shared state across frontend dashboards and BAND room runs.
+
+**Query Parameters:**
+- `limit` (integer, optional, default: 20, min: 1, max: 50): Number of history summaries to return.
+
+**Response (200 OK):**
+```json
+{
+  "total_runs": 12,
+  "runs": [
+    {
+      "pipeline_id": "99351e34-58a3-4813-b5f7-640f8fa2667a",
+      "query": "Quantum Computing",
+      "status": "success",
+      "executed_at": "2026-11-07T01:10:00.000000+00:00",
+      "total_duration_ms": 142.5,
+      "sources_requested": ["wikipedia", "arxiv", "crossref"],
+      "source_breakdown": {"wikipedia": 1, "arxiv": 1, "crossref": 1},
+      "total_results": 3,
+      "quality_score": 100.0,
+      "eligible_sources_count": 3,
+      "theme_count": 2,
+      "origin_platform": "web_ui",
+      "execution_id": "exec-99351e34"
+    }
+  ],
+  "latest_successful": { ... }
+}
+```
+
+#### `GET /pipeline/latest`
+Retrieves the most recent successful pipeline execution snapshot, or `null` if no successful runs exist. Failed executions never overwrite this value.
+
+#### `GET /pipeline/{pipeline_id}`
+Retrieves the complete, structured `PipelineResponse` snapshot for a specific historical execution UUID. Returns `404 Not Found` if the run has expired or does not exist.
+
+---
+
+### 9. Sponsor Interoperability & Delegation
+
+#### `GET /integrations/status`
+Returns genuine operational status, track roles (`mandatory_for_track`), boolean credential presence flags (`credentials_present`, strictly never leaking raw secrets), and recent delegation telemetry across BAND, Finch, Lyzr, AdaL, and Agent37.
+
+#### `POST /integrations/check/{platform_id}`
+Runs a non-mutating health probe or protocol handshake check against a registered sponsor platform adapter (`band`, `finch`, `lyzr`, `adal`, `agent37`).
+
+#### `POST /integrations/delegate`
+Validates and dispatches a structured task delegation request to a target sponsor adapter with bounded step execution timeouts.
+
+---
+
 ## End-to-End Multi-Agent Pipeline & Live Verification
 
 IntelliScope AI orchestrates four specialized agents sequentially:
@@ -921,13 +1030,13 @@ Per official Diwali Festiverse requirements for **Research — Data & Build**:
 
 IntelliScope AI implements modular, environment-configured sponsor adapters in `backend/integrations/`, official MCP / Skill / SDK artifacts, shared execution context (`ExecutionContext`), correlation IDs (`execution_id`), per-step timeouts (`PIPELINE_STEP_TIMEOUT_SECONDS`), and structured inter-agent handoffs (`AgentHandoffRecord`).
 
-| Platform | Track Role | Status | Runtime State | What Is Actually Implemented & Observed | Remaining Prerequisites for Live E2E |
+| Platform | Track Role | Status | Runtime State | What Is Actually Implemented & Observed | Live Execution Disclosure & Evidence Required |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **BAND (`band.ai`)** | **Mandatory** | **LIVE TESTED** | `ready` (`agent_config.yaml`) | Official `band-sdk==6.0.1` `SimpleAdapter` runtime (`scripts/band_collector_agent.py`), WS `SUPERSEDE` reconnect + `HeartbeatWatchdog`, lifecycle hooks, `@peer` A2A delegation (`delegate=@<handle>`), and live REST checks (`get_agent_me` 200 OK `@baboiiibabu/intelliscope-collector`, room `c348c418-f3a6-467d-8601-c7453bec68e1`, 10 historical User→Agent exchanges observed). Live user prompt for 'neural networks' received and 4-agent pipeline execution `221041b0` delivered back to room verified. | Live room communication verified with running host collector; automated test available via `scripts/live_band_room_test.py`. |
-| **Finch (`finchwork.net`)** | **Mandatory** | **IMPLEMENTED** | `ready` (local MCP) | Official MCP JSON-RPC 2.0 `stdio` server (`scripts/intelliscope_mcp_server.py`) supporting newline + `Content-Length` framing (`intelliscope_research`, `intelliscope_verify`, `intelliscope_pipeline`, `intelliscope_integrations_status`), `integrations/finch/mcp_servers.json`, and `integrations/finch/SKILL.md`. Protocol handshake & subprocess framing tested locally (`passed`). | Launch Finch Desktop GUI with `integrations/finch/mcp_servers.json` registered for a live desktop turn. |
-| **Lyzr (`lyzr.ai`)** | **Mandatory** | **PARTIAL** | `unconfigured` (missing env vars) | Modular `LyzrAdapter` (`backend/integrations/lyzr_adapter.py`) for `POST /v3/inference/chat/` and `POST /v3/workflows/{flow_id}/execute` (`x-api-key`, `session_id=execution_id`, retries, redaction, schema validation) plus opt-in `PipelineRequest.delegate_to_lyzr` / `LYZR_ENABLE_PIPELINE_DELEGATION` pipeline handoff (`insight_analyst → lyzr_studio`). Tested with HTTPX mocks. | Supply `LYZR_API_KEY` and `LYZR_AGENT_ID` / `LYZR_WORKFLOW_ID` in `.env` and run live inference verification. |
-| **AdaL (`adal.sylph.ai`)** | **Mandatory** | **PARTIAL** | `not_installed` | Official project AdaL Skill (`.atskills/intelliscope-research/SKILL.md` for `@skills:intelliscope-research`) plus `AdalAdapter` (`backend/integrations/adal_adapter.py`) supporting `adal -q <prompt> -o json --workspace ... --enabled-default-tools Read,Search` and `adal_agent_sdk` (`AdalAgentOptions`, `query()`), tested with mocks. | Install `adal` CLI (`curl -fsSL https://adal.sylph.ai/install.sh | bash`) or `adal-sdk`, authenticate, and set `ADAL_ENABLED=true`. |
-| **Agent37 (`agent37.com`)** | **Optional** | **PARTIAL** | `unconfigured` (missing env vars) | Modular `Agent37Adapter` (`backend/integrations/agent37_adapter.py`) implementing `X-Agent37-Key` auth, `/v1/health` checks, and bounded `POST /v1/instances/{id}/exec` calls, tested with HTTPX mocks. | Supply `AGENT37_API_KEY` and `AGENT37_INSTANCE_ID` if deploying to an Agent37 cloud sandbox later. |
+| **BAND (`band.ai`)** | **Mandatory** | **IMPLEMENTED / PARTIALLY LIVE VERIFIED** | `ready` (`agent_config.yaml`) | Official `band-sdk==6.0.1` `SimpleAdapter` runtime (`scripts/band_collector_agent.py`), Phoenix WS reconnect + watchdog, lifecycle hooks, `@peer` A2A delegation (`delegate=@<handle>`), and live REST checks (`get_agent_me` 200 OK `@baboiiibabu/intelliscope-collector`, room `c348c418-f3a6-467d-8601-c7453bec68e1`, 10 historical User→Agent exchanges observed). | **Reconciliation:** Implementation, REST authentication, and room discovery are verified. Claiming fully `LIVE TESTED` requires active host background daemon execution with a fresh inbound-to-outbound room roundtrip demonstrated (`scripts/live_band_room_test.py`). |
+| **Finch (`finchwork.net`)** | **Mandatory** | **IMPLEMENTED** | `ready` (local MCP) | Official MCP JSON-RPC 2.0 `stdio` server (`scripts/intelliscope_mcp_server.py`) supporting newline + `Content-Length` framing, implementing 4 tools (`intelliscope_research`, `intelliscope_verify`, `intelliscope_pipeline`, `intelliscope_integrations_status`), registered via `integrations/finch/mcp_servers.json` and `integrations/finch/SKILL.md`. | Protocol handshake and subprocess framing tested locally (`passed`). Fresh live desktop turn requires opening Finch Desktop GUI with registered MCP config. |
+| **Lyzr (`lyzr.ai`)** | **Mandatory** | **PARTIAL (Not Live-Configured)** | `unconfigured` (missing env vars) | Modular `LyzrAdapter` (`backend/integrations/lyzr_adapter.py`) for `POST /v3/inference/chat/` and `POST /v3/workflows/{flow_id}/execute` (`x-api-key`, `session_id=execution_id`, retries, redaction, schema validation) plus opt-in pipeline handoff (`insight_analyst → lyzr_studio`). Tested with HTTPX mocks. | **Disclosed as Not Live-Configured:** Live execution is not configured because `LYZR_API_KEY` and `LYZR_AGENT_ID` are not present in the environment. |
+| **AdaL (`adal.sylph.ai`)** | **Mandatory** | **PARTIAL (Not Live-Configured)** | `not_installed` | Official project AdaL Skill (`.atskills/intelliscope-research/SKILL.md` for `@skills:intelliscope-research`) plus `AdalAdapter` (`backend/integrations/adal_adapter.py`) supporting `adal -q <prompt> -o json` CLI execution and `adal_agent_sdk`, tested with mocks. | **Disclosed as Not Live-Configured:** Live execution is not configured because the `adal` CLI is not installed on this host (`ADAL_ENABLED=false`). |
+| **Agent37 (`agent37.com`)** | **Optional** | **PARTIAL (Not Live-Configured)** | `unconfigured` (missing env vars) | Modular `Agent37Adapter` (`backend/integrations/agent37_adapter.py`) implementing `X-Agent37-Key` auth, `/v1/health` checks, and bounded `POST /v1/instances/{id}/exec` calls, tested with HTTPX mocks. | **Disclosed as Optional Prize Track:** Live execution is not configured because `AGENT37_API_KEY` and `AGENT37_INSTANCE_ID` are not set. |
 
 ### Phase 5 Interoperability & Telemetry Endpoints
 - `GET /integrations/status` — Returns honest status categories (`live_tested`, `implemented`, `partial`, `not_integrated`), `mandatory_for_track` flags, runtime states, boolean `credentials_present` flags (secrets never exposed), and recent delegation telemetry.
@@ -938,7 +1047,7 @@ IntelliScope AI implements modular, environment-configured sponsor adapters in `
 
 ---
 
-## Project Status
+## Project Status & Evolution Log
 
 - **Phase 2.1: Data Collector Agent**: Complete (Wikipedia MediaWiki API, clean HTML, Pydantic validation)
 - **Phase 2.2: Research Verification Agent**: Complete (structural checks, HTTPS, domain whitelist, quality score 0–100)
@@ -950,41 +1059,28 @@ IntelliScope AI implements modular, environment-configured sponsor adapters in `
 - **Phase 3.1: BAND Message Sanitization & Quality Verification**: Complete (robust mention parsing, instruction stripping, relevance verification)
 - **Phase 3.2: Evidence Quality & Research Source Enhancement**: Complete (extract retrieval, markup sanitization, transparent relevance, dynamic confidence, 201 backend tests)
 - **Phase 3.3: Research Relevance & Output Integrity Fix**: Complete (clean BAND mention parsing, entity/list weak relevance classification, separate verification structural vs relevance counts, heuristic dashboard labels, 205 tests).
-- **Phase 3.4: Dashboard Data Consistency & Research History Fix**: Complete:
-  - Fixed theme propagation in `DashboardBuilderAgent`, `DashboardResponse` (`themes`, `key_themes`, `dashboard_id`, `metadata`), BAND `format_pipeline_reply()`, and React UI so actual analyst themes, names, descriptions, and evidence counts propagate end-to-end (honestly returning `[]` when no themes exist).
-  - Added shared backend pipeline run history (`PipelineHistoryStore`, `GET /pipeline/history`, `GET /pipeline/latest`, `GET /pipeline/{pipeline_id}`) and synchronized React context state (`ResearchContext`, `pipelineState.js`).
-  - Ensured latest successful research (including BAND-initiated queries) replaces stale UI state automatically without double-counting Overview KPIs, allows selecting and restoring any historical run's sources/verification/insights/dashboard, and prevents failed runs from overwriting the last successful research.
-  - Preserved BAND and frontend consistency across provenance (`wikipedia_extract` vs `wikipedia_search_snippet`), HTTPS URLs, verification structural/relevance counts, analyst confidence rationales, and heuristic chart flags.
-- **Phase 4: Complete React Frontend**: Complete:
-  - Modern, responsive Dark Navy/Indigo AI research SaaS UI using React 18, Vite, Tailwind CSS, Lucide React, and Recharts.
-  - Sidebar Navigation: Overview, New Research, Research Results, Verification, AI Insights, Analytics Dashboard, Agent Activity.
-  - Reusable Axios API service with `http://127.0.0.1:8010` default, environment variable override (`VITE_API_BASE_URL`), and comprehensive error handling.
-  - Live interaction with `POST /pipeline`, `GET /pipeline/history`, `GET /pipeline/{pipeline_id}`, and `GET /agents/status` (zero fabricated data or simulated progress).
-  - Recharts integration supporting vertical bar charts, horizontal bar charts, and pie charts with heuristic labeling.
-  - Session and local state preservation across sidebar navigation plus historical run switching.
-  - 9 frontend automated tests (`npm test` in `frontend/`) and production build passing (`npm run build`).
-- **Phase 4 / 4.5: Multi-Source Integration & Live Validation**: Complete:
-  - Added modular `arXiv` (`backend/services/sources/arxiv_client.py`) and `Crossref` (`backend/services/sources/crossref_client.py`) source clients alongside `Wikipedia`, unified record normalization, source-aware verification (domains + DOI syntax/deduplication), multi-source analyst & dashboard charts, and BAND/React source selection.
-  - Verified live HTTP integration across Wikipedia, arXiv, Crossref, and combined 4-agent pipeline via opt-in `scripts/live_multisource_test.py` (reports saved in `test-results/live-multisource/`).
-- **Phase 5: Sponsor Integration & Agent Interoperability**: Complete within honest scope:
-  - Added `ExecutionContext` (`execution_id`), `AgentHandoffRecord`, per-step pipeline timeouts, modular `backend/integrations/` adapters, `/integrations/status`, `/integrations/check/{platform_id}`, `/integrations/delegate`, BAND lifecycle/event/A2A delegation enhancements, Agent Activity UI telemetry, and opt-in `scripts/live_integrations_test.py`.
-- **Phase 6: Deployment Readiness Audit & Operational Setup**: Complete:
-  - Conducted technical readiness audit across architecture, port isolation, security, history persistence, background collector requirements, and sponsor interoperability.
-  - Preserved backend port `8010` (strictly isolated from separate AID-DRAS service on port `8000`).
-  - Added configurable CORS security (`CORS_ALLOWED_ORIGINS`) and history storage path (`HISTORY_STORAGE_PATH`) in settings.
-  - Updated [`.env.example`](file:///home/jagapathi/Projects/intelliscope-ai/.env.example) with complete, safe deployment placeholders.
-  - Created [docs/DEPLOYMENT_READINESS_REPORT.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_READINESS_REPORT.md) and [docs/DEPLOYMENT_GUIDE.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_GUIDE.md).
-  - Verified 257 backend tests, 12 frontend unit tests, and production build.
+- **Phase 3.4: Dashboard Data Consistency & Research History Fix**: Complete (theme propagation, shared backend pipeline run history, synchronized React context).
+- **Phase 4: Complete React Frontend**: Complete (Dark Navy/Indigo research SaaS UI with React 18, Vite, Tailwind CSS, Lucide React, and Recharts).
+- **Phase 4.5: Multi-Source Integration & Live Validation**: Complete (arXiv preprints, Crossref DOIs, unified record normalizer, polite rate limiting, live HTTP validation in `test-results/live-multisource/`).
+- **Phase 5: Sponsor Integration & Agent Interoperability**: Complete (BAND implemented & partially live verified, Finch MCP implemented, Lyzr/AdaL/Agent37 modular adapters with honest status reporting).
+- **Phase 6: Deployment Readiness Audit & Operational Setup**: Complete (backend port 8010 isolation, Render blueprints, safe environment templates, deployment guides).
+- **Phase 7A: Free Render Cloud Deployment Preparation**: Complete (hybrid topology: Render Static Site for frontend, Render Free Web Service for backend, local host for persistent BAND WebSocket daemon).
+- **Phase 7B: Deployed Frontend/Backend Connection & Health Probe Fix**: Complete (dynamic API base URL resolution, window-location fallbacks, robust health checks).
+- **Phase 7C: Production Relevance Quality Improvement**: Complete (topic-aware matching, meaningful term weighting, title/abstract evidence grounding).
+- **Phase 7D: Production Dashboard Integrity Audit**: Complete (strict epistemic separation: "Structurally Eligible Sources", overlapping thematic citation labels, confidence capping on weak evidence, synchronized historical run switching).
+- **Phase 8A: Final Hackathon Submission Readiness**: Complete (comprehensive README audit, Mermaid architecture guide, 3-minute demo script, and submission checklist).
+- **Phase 8B: Final Submission Documentation Audit**: Complete (reconciled BAND status to IMPLEMENTED / PARTIALLY LIVE VERIFIED, verified zero secret leakage, audited all deployment URLs and repo links).
 
 ---
 
-## Running the Application
+## Running the Application Locally
 
 ### 1. Start the FastAPI Backend (Port 8010)
 ```bash
 source .venv/bin/activate
 uvicorn backend.main:app --host 127.0.0.1 --port 8010 --reload
 ```
+Interactive API documentation will be available at `http://localhost:8010/docs`.
 
 ### 2. Start the React Frontend Development Server
 ```bash
@@ -996,40 +1092,27 @@ Open `http://localhost:5173` in your browser.
 ### 3. Build Frontend for Production
 ```bash
 cd frontend
-VITE_API_BASE_URL="" npm run build
+npm run build
 ```
 
-### 4. Run Test Suites & Opt-In Live Validation
-- **Backend (mocked unit & integration suite)**: `.venv/bin/pytest -v` (257 passed; live network checks excluded cleanly via `pytest.ini`)
-- **Frontend**: `cd frontend && npm test` (12 passed) and `npm run build`
+### 4. Run Test Suites & Live Validation
+- **Backend Unit & Integration Suite**: `.venv/bin/pytest tests/` (260 passed, 0 failed, 1 warning)
+- **Frontend Unit Tests**: `npm --prefix frontend test` (17 passed, 0 failed)
 - **Opt-In Live Multi-Source Validation**: `.venv/bin/python scripts/live_multisource_test.py`
 - **Opt-In Live Sponsor Integration Probe**: `.venv/bin/python scripts/live_integrations_test.py`
 - **Opt-In Live BAND Room E2E Check**: `.venv/bin/python scripts/live_band_room_test.py`
 
 ### 5. Deployment Options
-- **Free Render Cloud Deployment**: Refer to [docs/RENDER_DEPLOYMENT_GUIDE.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/RENDER_DEPLOYMENT_GUIDE.md) and [render.yaml](file:///home/jagapathi/Projects/intelliscope-ai/render.yaml) for deploying the FastAPI backend (Free Web Service) and React SPA (Free Static Site with SPA rewrite rules).
-- **Persistent BAND Collector Setup**: Refer to [docs/BAND_REMOTE_BACKEND_SETUP.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/BAND_REMOTE_BACKEND_SETUP.md) for connecting the local Ubuntu BAND collector daemon to your remote Render backend.
-- **Single Linux Server Deployment**: Refer to [docs/DEPLOYMENT_GUIDE.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_GUIDE.md) and [docs/DEPLOYMENT_READINESS_REPORT.md](file:///home/jagapathi/Projects/intelliscope-ai/docs/DEPLOYMENT_READINESS_REPORT.md) for systemd services, Nginx reverse proxy, and local hosting.
-
-Production backend invocation:
-```bash
-uvicorn backend.main:app --host 0.0.0.0 --port 8010 --workers 1
-```
-Production BAND collector daemon invocation (local or remote backend):
-```bash
-python scripts/band_collector_agent.py --backend-url http://127.0.0.1:8010
-```
+- **Free Render Cloud Deployment**: Refer to [docs/RENDER_DEPLOYMENT_GUIDE.md](docs/RENDER_DEPLOYMENT_GUIDE.md) and [render.yaml](render.yaml) for deploying the FastAPI backend and React SPA.
+- **Persistent BAND Collector Setup**: Refer to [docs/BAND_REMOTE_BACKEND_SETUP.md](docs/BAND_REMOTE_BACKEND_SETUP.md) for running the local Ubuntu BAND collector daemon connected to your remote Render backend.
+- **Single Linux Server Deployment**: Refer to [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for systemd services, Nginx reverse proxy, and local hosting.
 
 ---
 
-## Evidence Quality & Verification Boundaries
+## Known Limitations
 
-IntelliScope AI enforces transparent epistemic boundaries across all research agents:
-
-| Dimension | Verification Scope | Methodological Boundary |
-|:---|:---|:---|
-| **Structural Integrity** | HTTPS protocol compliance, Wikipedia domain whitelist, ISO 8601 timestamps, deduplication. | Guaranteed by automated rule checks (`is_factually_verified = False`). |
-| **Source Provenance** | Distinguishes `wikipedia_extract` (introductory page extract) from `wikipedia_search_snippet`. | Provenance recorded per item. |
-| **Topical Relevance** | Transparent lexical matching classifies sources as `relevant` or `weakly_relevant` with human-readable reasons. | No arbitrary statistical percentages or probabilities are fabricated. |
-| **Analyst Confidence** | Rated `high`, `medium`, or `low` based on extract length, relevance status, and verification warnings. | Structural compliance alone does not entitle an observation to high confidence. |
-| **Factual Truth** | Encyclopedia summary extracts represent secondary overview literature. | Does not replace primary source fact-checking or peer-reviewed empirical verification. |
+1. **Render Free Tier Inactivity Spin-Down**: The free backend web service spins down after 15 minutes of inactivity. The initial wake-up request can take ~50 seconds before responding normally.
+2. **Persistent Background Worker Limitation**: Render Free Web Services do not support permanently running background workers or persistent WebSockets. Therefore, the BAND Data Collector agent daemon must run on a local machine or dedicated server to maintain an active WebSocket connection with `band.ai`.
+3. **Public Academic API Constraints**: arXiv and Crossref public endpoints enforce rate limits (`HTTP 429`) and occasional latency. Crossref frequently restricts open full-text abstracts; when omitted, IntelliScope AI logs an honest metadata fallback instead of synthesizing speculative abstract prose.
+4. **Epistemic Scope (Structural vs. Factual Verification)**: The Research Verification Agent verifies HTTPS protocol compliance, domain allowlists, DOI formatting, and batch deduplication. It explicitly sets `is_factually_verified = false` with a mandatory disclaimer, as structural validity does not guarantee empirical scientific truth.
+5. **External Sponsor Runtime Requirements**: While all sponsor adapters are implemented and tested, live execution for Lyzr, AdaL, and Agent37 requires external developer API keys or host CLI binaries that are not pre-installed in the deployment container.

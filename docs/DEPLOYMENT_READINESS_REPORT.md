@@ -24,7 +24,7 @@ IntelliScope AI is an autonomous 4-agent research and intelligence platform buil
 | **CORS & Network Security** | **PASS** | Configurable `CORS_ALLOWED_ORIGINS` added to settings; defaults to wildcard `*` for dev, supports comma-separated production origins. |
 | **History Persistence** | **CONDITIONAL** | File-backed atomic JSON store (`pipeline_history.json`). Works seamlessly on persistent filesystems or mounted Docker volumes; ephemeral serverless containers require persistent volume mount. Single-worker process boundary documented. |
 | **Background BAND Collector** | **PASS / MONITORED** | `scripts/band_collector_agent.py` requires a persistent daemon/systemd service (cannot run in short-lived serverless functions). Host single-instance lock prevents duplicate processes. |
-| **Sponsor Integrations Status** | **HONEST & VERIFIED** | **BAND (`LIVE TESTED`)**, **Finch (`IMPLEMENTED`)**, **Lyzr (`PARTIAL`)**, **AdaL (`PARTIAL`)**, **Agent37 (`PARTIAL`)**. Zero fabricated statuses. |
+| **Sponsor Integrations Status** | **HONEST & VERIFIED** | **BAND (`IMPLEMENTED / PARTIALLY LIVE VERIFIED`)**, **Finch (`IMPLEMENTED`)**, **Lyzr (`PARTIAL - NOT LIVE-CONFIGURED`)**, **AdaL (`PARTIAL - NOT LIVE-CONFIGURED`)**, **Agent37 (`PARTIAL - NOT LIVE-CONFIGURED`)**. Zero fabricated statuses. |
 | **Test Suites & Verification** | **PASS (100%)** | 257 backend pytest tests passing (100%), 12 frontend unit tests passing (100%), production build passing. |
 
 ---
@@ -80,19 +80,19 @@ Per the Diwali Festiverse **Research — Data & Build** track requirements:
 
 ```
 [ Research — Data & Build Track ]
-├── BAND (band.ai)          ──> [ LIVE TESTED  ] (Active host daemon, REST 200 OK, live room roundtrip verified)
+├── BAND (band.ai)          ──> [ IMPLEMENTED / PARTIALLY LIVE VERIFIED ] (REST 200 OK, room discovery, historical msgs; fresh room roundtrip requires host worker)
 ├── Finch (finchwork.net)   ──> [ IMPLEMENTED  ] (Local stdio MCP server & tools tested with newline/Content-Length)
-├── Lyzr (lyzr.ai)          ──> [ PARTIAL      ] (REST v3 adapter implemented; unconfigured, missing LYZR_API_KEY)
-├── AdaL (adal.sylph.ai)    ──> [ PARTIAL      ] (Project skill .atskills present; CLI binary not installed)
-└── Agent37 (agent37.com)   ──> [ PARTIAL      ] (Optional prize sponsor; REST adapter tested; deployment deferred)
+├── Lyzr (lyzr.ai)          ──> [ PARTIAL - NOT LIVE-CONFIGURED ] (REST v3 adapter implemented; missing LYZR_API_KEY)
+├── AdaL (adal.sylph.ai)    ──> [ PARTIAL - NOT LIVE-CONFIGURED ] (Project skill .atskills present; CLI binary not installed)
+└── Agent37 (agent37.com)   ──> [ PARTIAL - NOT LIVE-CONFIGURED ] (Optional prize sponsor; REST adapter tested; deployment deferred)
 ```
 
-1. **BAND (`band.ai`) — Status: `LIVE TESTED`**
+1. **BAND (`band.ai`) — Status: `IMPLEMENTED / PARTIALLY LIVE VERIFIED`**
    - Runtime: `band-sdk==6.0.1` `SimpleAdapter` ([`scripts/band_collector_agent.py`](file:///home/jagapathi/Projects/intelliscope-ai/scripts/band_collector_agent.py)).
    - REST Authentication: Verified HTTP 200 OK (`get_agent_me` returned ID `f00ed576-fbfe-4dfb-95a7-82f6db3c6825`, handle `@baboiiibabu/intelliscope-collector`).
    - WebSocket Connection: Persistent Phoenix WebSocket connection to `wss://app.band.ai/api/v1/socket/websocket` with auto-reconnect (`SUPERSEDE` policy) and `HeartbeatWatchdog`.
    - Single-Instance Lock: Protects `/tmp/band-agent-f00ed576-fbfe-4dfb-95a7-82f6db3c6825.lock` preventing duplicate running collectors from splitting room conversations.
-   - Live Room Communication Verified: Real user prompt (`"neural networks"`) received from user `jagapathi naidu` in room `c348c418-f3a6-467d-8601-c7453bec68e1`, executed via FastAPI pipeline (`221041b0`), and full synthesis delivered back to room.
+   - Status Reconciliation: REST authentication and room discovery are verified. Claiming fully `LIVE TESTED` requires active host background daemon execution with a fresh inbound-to-outbound room roundtrip demonstrated (`scripts/live_band_room_test.py`).
 2. **Finch Desktop (`finchwork.net`) — Status: `IMPLEMENTED`**
    - Runtime: Local Model Context Protocol (MCP) JSON-RPC 2.0 stdio server ([`scripts/intelliscope_mcp_server.py`](file:///home/jagapathi/Projects/intelliscope-ai/scripts/intelliscope_mcp_server.py)).
    - Configuration: [`integrations/finch/mcp_servers.json`](file:///home/jagapathi/Projects/intelliscope-ai/integrations/finch/mcp_servers.json) and companion skill [`integrations/finch/SKILL.md`](file:///home/jagapathi/Projects/intelliscope-ai/integrations/finch/SKILL.md).
