@@ -19,10 +19,12 @@ export default function App() {
             <Route index element={<Overview />} />
             <Route path="new-research" element={<NewResearch />} />
             <Route path="results" element={<ResearchResults />} />
+            <Route path="research-results" element={<Navigate to="/results" replace />} />
             <Route path="verification" element={<Verification />} />
             <Route path="insights" element={<AIInsights />} />
             <Route path="dashboard" element={<AnalyticsDashboard />} />
             <Route path="activity" element={<AgentActivity />} />
+            <Route path="agents" element={<Navigate to="/activity" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
