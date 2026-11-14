@@ -16,6 +16,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useResearch } from '../context/ResearchContext';
+import { API_BASE_URL } from '../api/client';
 import LoadingState from '../components/common/LoadingState';
 import ErrorAlert from '../components/common/ErrorAlert';
 import AgentStatusBadge from '../components/common/AgentStatusBadge';
@@ -58,7 +59,7 @@ const AGENT_ORDER = [
 ];
 
 export default function NewResearch() {
-  const { currentPipeline, isExecuting, executionError, startResearch } = useResearch();
+  const { currentPipeline, isExecuting, executionError, startResearch, backendHealth } = useResearch();
 
   const [topic, setTopic] = useState('');
   const [limit, setLimit] = useState(5);
@@ -233,6 +234,17 @@ export default function NewResearch() {
             </div>
           </div>
 
+          {/* Backend Health Alert Notice */}
+          {!backendHealth?.healthy && !backendHealth?.checking && (
+            <div className="p-3.5 rounded-xl border border-rose-900/60 bg-rose-950/40 text-xs text-rose-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>
+                FastAPI backend is currently offline or waking from sleep. Research requests will be enabled once the server responds at{' '}
+                <code className="font-mono text-rose-200">{API_BASE_URL}</code>.
+              </span>
+            </div>
+          )}
+
           {/* Submit Action */}
           <div className="pt-2 flex items-center justify-between gap-4 border-t border-slate-800">
             <div className="text-xs text-slate-500">
@@ -241,11 +253,36 @@ export default function NewResearch() {
 
             <button
               type="submit"
-              disabled={!topic.trim() || selectedSources.length === 0 || isExecuting}
+              disabled={
+                !topic.trim() ||
+                selectedSources.length === 0 ||
+                isExecuting ||
+                (!backendHealth?.healthy && !backendHealth?.checking) ||
+                backendHealth?.checking
+              }
+              title={
+                !backendHealth?.healthy && !backendHealth?.checking
+                  ? `Backend is offline at ${API_BASE_URL}`
+                  : backendHealth?.checking
+                  ? 'Connecting to backend...'
+                  : !topic.trim()
+                  ? 'Enter a research topic or select a suggestion to begin'
+                  : selectedSources.length === 0
+                  ? 'Select at least one research source'
+                  : 'Execute autonomous multi-agent pipeline'
+              }
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all shadow-md shadow-brand-600/30 hover:shadow-glow-indigo active:scale-95"
             >
               <Play className="w-4 h-4 fill-current" />
-              <span>{isExecuting ? 'Executing Fleet...' : 'Start Research'}</span>
+              <span>
+                {isExecuting
+                  ? 'Executing Fleet...'
+                  : backendHealth?.checking
+                  ? 'Connecting...'
+                  : !backendHealth?.healthy && !backendHealth?.checking
+                  ? 'Backend Offline'
+                  : 'Start Research'}
+              </span>
             </button>
           </div>
         </form>

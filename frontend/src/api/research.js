@@ -1,4 +1,4 @@
-import apiClient from './client';
+import apiClient from './client.js';
 
 /**
  * Execute the unified end-to-end multi-agent research pipeline.
@@ -47,10 +47,10 @@ export async function getAgentsStatus() {
 
 /**
  * Check backend health status.
- * Calls GET /health
+ * Calls GET /health with an extended timeout to gracefully handle Render free tier cold starts.
  */
 export async function checkBackendHealth() {
-  return apiClient.get('/health');
+  return apiClient.get('/health', { timeout: 35000 });
 }
 
 /**

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, Clock, Sparkles, AlertCircle, RotateCcw } from 'lucide-react';
 import { useResearch } from '../../context/ResearchContext';
+import { API_BASE_URL } from '../../api/client';
 import AgentStatusBadge from '../common/AgentStatusBadge';
 
 const PAGE_TITLES = {
@@ -44,9 +45,23 @@ export default function Header({ onMenuClick }) {
       <div className="flex items-center gap-2.5 sm:gap-3">
         {/* Backend offline warning banner */}
         {!backendHealth.healthy && !backendHealth.checking && (
-          <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-950/70 border border-rose-800 text-rose-300 text-xs">
+          <span
+            className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-950/70 border border-rose-800 text-rose-300 text-xs"
+            title={`Backend URL: ${API_BASE_URL}`}
+          >
             <AlertCircle className="w-3.5 h-3.5" />
-            <span>Backend Offline (port 8010)</span>
+            <span>
+              {API_BASE_URL.includes('8010') ? 'Backend Offline (port 8010)' : 'Backend Offline'}
+            </span>
+          </span>
+        )}
+        {backendHealth.checking && (
+          <span
+            className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-950/60 border border-amber-800 text-amber-300 text-xs animate-pulse"
+            title={`Connecting to: ${API_BASE_URL}`}
+          >
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>Connecting to Backend...</span>
           </span>
         )}
 

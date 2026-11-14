@@ -12,6 +12,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useResearch } from '../../context/ResearchContext';
+import { API_BASE_URL } from '../../api/client';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Overview', icon: LayoutDashboard },
@@ -112,7 +113,11 @@ export default function Sidebar({ isOpen, onClose }) {
                 }`}
               />
               <span className={backendHealth.healthy ? 'text-emerald-400 font-medium' : 'text-rose-400 font-medium'}>
-                {backendHealth.healthy ? ':8010 Online' : ':8010 Offline'}
+                {backendHealth.checking
+                  ? 'Checking...'
+                  : backendHealth.healthy
+                  ? (API_BASE_URL.includes('8010') ? ':8010 Online' : 'Online')
+                  : (API_BASE_URL.includes('8010') ? ':8010 Offline' : 'Offline')}
               </span>
             </span>
           </div>
@@ -121,7 +126,7 @@ export default function Sidebar({ isOpen, onClose }) {
             <span>Official BAND SDK 6.0.1</span>
             <span>•</span>
             <a
-              href="http://127.0.0.1:8010/docs"
+              href={`${API_BASE_URL}/docs`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-brand-400 hover:text-brand-300 flex items-center gap-0.5"

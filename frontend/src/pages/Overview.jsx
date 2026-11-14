@@ -246,7 +246,7 @@ export default function Overview() {
             })
           ) : (
             <div className="col-span-full p-6 text-center text-rose-400 text-xs bg-rose-950/20 rounded-xl border border-rose-900/40">
-              Backend agent metadata unavailable. Ensure FastAPI backend is active on port 8010.
+              Backend agent metadata unavailable. Ensure FastAPI backend is active and reachable.
             </div>
           )}
         </div>

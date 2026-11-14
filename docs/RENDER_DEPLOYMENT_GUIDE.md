@@ -96,7 +96,7 @@ If you prefer to configure each service manually in the Render dashboard, follow
 | Key | Value | Purpose |
 | :--- | :--- | :--- |
 | `HOST` | `0.0.0.0` | Binds to all interfaces |
-| `CORS_ALLOWED_ORIGINS` | `*` | Or specify `https://<your-frontend>.onrender.com` |
+| `CORS_ALLOWED_ORIGINS` | `https://intelliscope-frontend.onrender.com,http://localhost:5173,http://127.0.0.1:5173` | Production frontend + local dev |
 | `PIPELINE_STEP_TIMEOUT_SECONDS` | `30.0` | Step execution timeout |
 | `PYTHON_VERSION` | `3.12.3` | Matches tested environment |
 | `DEFAULT_USER_AGENT` | `IntelliScopeAI/1.0 (dev@intelliscope.ai) httpx/0.28.1` | Polite headers for arXiv/Crossref |

@@ -70,6 +70,17 @@ def test_health_endpoint():
     assert data["backend"] == "operational"
 
 
+def test_cors_headers_for_render_frontend():
+    """Verify CORS headers correctly allow deployed Render frontend origin."""
+    response = client.get(
+        "/health",
+        headers={"Origin": "https://intelliscope-frontend.onrender.com"}
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://intelliscope-frontend.onrender.com"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+
 def test_agents_status_endpoint():
     """
     Verify GET /agents/status accurately reflects agent statuses:
