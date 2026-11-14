@@ -505,6 +505,104 @@ def test_check_source_relevance_phase_7c_topic_aware_matching():
     assert "Neither title nor extract contains query key terms" in reason
 
 
+def test_check_source_relevance_phase_7d_audit_and_crossref_title_only():
+    """
+    Phase 7D Tests:
+    1. Title-only relevant sources: Crossref records lacking open abstract metadata
+       where the title substantively covers both clinical and AI concepts.
+    2. Subfield hierarchy: Recognizes NLP, LLMs, Computer Vision, Transformers as AI.
+    3. Specialized clinical sub-domains: Recognizes cardiovascular, oncology, surgical,
+       diabetic retinopathy, chest radiography as healthcare.
+    4. Directional matching: Broad parent queries accept specialized subtopics; narrow
+       subtopic queries (e.g. 'pneumonia') do not cross-match sibling subtopics ('hospital').
+    5. Partially relevant sources honestly identified as weakly_relevant with clear missing terms.
+    6. Unrelated sources rejected.
+    """
+    missing_abstract_snippet = (
+        "Scholarly journal article published in 'Journal of Medical Systems', DOI: 10.1007/s10916-020-01. "
+        "Full abstract is not available in Crossref open metadata."
+    )
+
+    # 1. Crossref Title-only: AI + Healthcare in title with missing abstract
+    crossref_cases = [
+        "Artificial Intelligence in Healthcare: A Review",
+        "Machine Learning in Medicine: A Practical Introduction",
+        "Cardiovascular Risk Prediction Using Machine Learning Algorithms",
+        "Deep Learning for Automated Detection of Diabetic Retinopathy from Fundus Photographs",
+        "Large Language Models in Medicine: Hype or Hope?",
+        "Computer Vision Approaches for Surgical Workflow Recognition",
+        "Generative AI and Foundation Models in Healthcare: Opportunities and Challenges",
+    ]
+    for title in crossref_cases:
+        rel, is_weak, reason = check_source_relevance(
+            query="healthcare AI",
+            title=title,
+            snippet=missing_abstract_snippet,
+        )
+        assert rel == "relevant", f"Expected relevant for title '{title}', got {rel} ({reason})"
+        assert is_weak is False
+        assert "all query terms" in reason or "all key query terms" in reason or "core query concepts" in reason
+
+    # 2. arXiv multi-concept coordination: Clinical task in title, AI architecture in abstract
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare AI",
+        title="ChestX-Det: A Dataset for Chest X-ray Abnormalities Detection",
+        snippet="Computer aided diagnosis using deep convolutional networks for automated detection of pulmonary diseases from radiograph scans.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+
+    # 3. Directional matching: Narrow subtopic query requires that specific subtopic
+    # Query 'pneumonia' should NOT match general hospital/nursing administration
+    rel, is_weak, reason = check_source_relevance(
+        query="pneumonia research",
+        title="Hospital Nurse Shift Scheduling and Ward Management",
+        snippet="A study of nursing rosters, shift duration, and bed management in an urban general hospital.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "Neither title nor extract contains query key terms" in reason
+
+    # But query 'pneumonia' DOES match actual pneumonia research
+    rel, is_weak, reason = check_source_relevance(
+        query="pneumonia research",
+        title="Clinical Outcomes of Pediatric Pneumonia Patients",
+        snippet="A randomized trial evaluating antibiotic duration for bacterial pneumonia in hospitalized pediatric patients.",
+    )
+    assert rel == "relevant"
+    assert is_weak is False
+
+    # 4. Partially relevant: Pure cardiology without any AI
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare AI",
+        title="Cardiovascular Disease Prevention and Lifestyle Intervention: Diet and Exercise in Elderly Patients",
+        snippet="A prospective cohort study on dietary patterns and physical exercise for primary prevention of myocardial infarction.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "mentions 'healthcare'" in reason or "lacks core query terms 'ai'" in reason
+
+    # 5. Partially relevant: Pure machine learning without any healthcare
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare AI",
+        title="Recent Advances in Deep Neural Network Optimization Algorithms",
+        snippet="We propose an accelerated stochastic gradient descent method for training deep transformer networks on benchmark datasets.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "mentions 'ai'" in reason or "lacks core query terms 'healthcare'" in reason
+
+    # 6. Unrelated source: Photovoltaic solar panels
+    rel, is_weak, reason = check_source_relevance(
+        query="healthcare AI",
+        title="Solar Panel Photovoltaic Efficiency Trends and Silicon Cell Lifespans",
+        snippet="An empirical analysis of perovskite and crystalline silicon photovoltaic cells under high solar radiation.",
+    )
+    assert rel == "weakly_relevant"
+    assert is_weak is True
+    assert "Neither title nor extract contains query key terms" in reason
+
+
 @pytest.mark.asyncio
 async def test_fetch_page_extracts_success():
     """Verify fetch_page_extracts parses introductory extracts and resolves redirects."""

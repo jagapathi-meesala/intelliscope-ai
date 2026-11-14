@@ -61,40 +61,110 @@ INTENT_MODIFIER_WORDS = {
 }
 
 # Domain concept clusters linking abbreviations, full phrases, and closely associated domain terms
-# for transparent, topic-aware matching across multi-disciplinary academic literature
+# for transparent, topic-aware matching across multi-disciplinary academic literature.
+# Supports directional matching: broad primary category query terms (e.g. 'healthcare', 'ai')
+# match specialized subtopics (e.g. 'radiology', 'cardiovascular', 'transformer'), while narrow
+# subtopic query terms (e.g. 'pneumonia') require their specific concept family.
 CONCEPT_CLUSTERS: List[Dict[str, Any]] = [
     {
         "id": "ai",
+        "primary": [
+            "ai", "artificial intelligence", "intelligent system", "intelligent systems",
+            "machine learning", "deep learning",
+        ],
+        "subtopics": [
+            "neural network", "neural networks", "deep neural",
+            "nlp", "natural language processing", "large language model", "large language models",
+            "llm", "llms", "language model", "language models",
+            "computer vision", "image recognition", "image segmentation", "medical imaging",
+            "convolutional", "cnn", "transformer", "transformers", "vision transformer",
+            "foundation model", "foundation models", "generative ai", "genai",
+            "reinforcement learning", "federated learning", "supervised learning", "unsupervised learning",
+            "predictive model", "predictive models", "predictive modeling", "data mining",
+            "graph neural network", "graph neural networks",
+        ],
         "terms": ["ai", "artificial intelligence", "intelligent system", "intelligent systems"],
         "broad": ["machine learning", "deep learning", "neural network", "neural networks"],
     },
     {
         "id": "ml",
+        "primary": ["ml", "machine learning"],
+        "subtopics": [
+            "deep learning", "neural network", "neural networks", "deep neural",
+            "supervised learning", "unsupervised learning", "reinforcement learning",
+            "federated learning", "predictive model", "predictive modeling",
+            "random forest", "gradient boosting", "xgboost", "support vector",
+        ],
         "terms": ["ml", "machine learning"],
         "broad": ["deep learning", "neural network", "neural networks", "artificial intelligence", "ai"],
     },
     {
         "id": "deep_learning",
+        "primary": ["dl", "deep learning"],
+        "subtopics": [
+            "neural network", "neural networks", "deep neural",
+            "convolutional", "cnn", "transformer", "transformers",
+            "foundation model", "foundation models",
+        ],
         "terms": ["dl", "deep learning", "neural network", "neural networks", "deep neural", "convolutional", "cnn", "transformer", "transformers"],
         "broad": ["machine learning", "artificial intelligence", "ai"],
     },
     {
         "id": "nlp",
+        "primary": ["nlp", "natural language processing"],
+        "subtopics": [
+            "large language model", "large language models", "llm", "llms",
+            "language model", "language models", "text mining",
+        ],
         "terms": ["nlp", "natural language processing", "llm", "llms", "language model", "language models"],
         "broad": ["artificial intelligence", "ai", "machine learning"],
     },
     {
         "id": "cv",
+        "primary": ["cv", "computer vision"],
+        "subtopics": [
+            "image recognition", "image segmentation", "medical imaging",
+            "image analysis", "object detection",
+        ],
         "terms": ["cv", "computer vision", "image recognition", "image segmentation", "medical imaging", "image analysis"],
         "broad": ["artificial intelligence", "ai", "machine learning", "deep learning"],
     },
     {
         "id": "quantum",
+        "primary": [
+            "quantum computing", "quantum computation", "quantum computer", "quantum computers",
+            "quantum algorithm", "quantum algorithms", "qubit", "qubits", "quantum",
+        ],
+        "subtopics": [
+            "superconducting qubit", "ion trap", "quantum error correction", "quantum supremacy",
+        ],
         "terms": ["quantum computing", "quantum computation", "quantum computer", "quantum computers", "quantum algorithm", "quantum algorithms", "qubit", "qubits", "quantum"],
         "broad": [],
     },
     {
         "id": "healthcare",
+        "primary": [
+            "healthcare", "health care", "health", "medical", "medicine", "clinical", "biomedical",
+        ],
+        "subtopics": [
+            "hospital", "hospitals", "clinic", "clinics", "clinician", "clinicians",
+            "physician", "physicians", "doctor", "doctors", "nurse", "nurses",
+            "patient", "patients", "in-hospital", "inpatient", "outpatient", "intensive care", "icu",
+            "ehr", "emr", "electronic health", "electronic medical", "health record", "health records",
+            "diagnosis", "diagnostics", "diagnostic", "prognosis", "prognostic", "screening", "triage",
+            "disease", "diseases", "disorder", "disorders", "syndrome", "syndromes",
+            "mortality", "readmission", "therapy", "therapies", "therapeutic", "treatment", "treatments",
+            "clinical decision support", "cdss",
+            "radiology", "radiologist", "radiologists", "radiograph", "radiographs", "radiography", "radiographic",
+            "x-ray", "x-rays", "xray", "xrays", "ct scan", "ct scans", "computed tomography", "mri", "ultrasound",
+            "pathology", "pathologist", "pathologists", "pathological", "histopathology", "biopsy",
+            "cardiology", "cardiovascular", "cardiac", "heart failure", "myocardial",
+            "oncology", "cancer", "cancers", "tumor", "tumors", "neoplasm",
+            "neurology", "neurological", "dermatology", "ophthalmology", "retinopathy",
+            "pulmonary", "pneumonia", "covid-19", "covid", "coronavirus",
+            "diabetes", "diabetic",
+            "surgical", "surgery", "surgeries", "surgeon", "surgeons",
+        ],
         "terms": [
             "healthcare", "health care", "health", "medical", "medicine", "clinical",
             "hospital", "hospitals", "biomedical", "patient", "patients", "physician",
@@ -106,6 +176,12 @@ CONCEPT_CLUSTERS: List[Dict[str, Any]] = [
     },
     {
         "id": "genomics",
+        "primary": [
+            "crispr", "gene editing", "genome editing", "genetic engineering", "cas9", "genomics", "dna", "rna",
+        ],
+        "subtopics": [
+            "base editing", "prime editing", "guide rna", "genomic",
+        ],
         "terms": ["crispr", "gene editing", "genome editing", "genetic engineering", "cas9", "genomics", "dna", "rna"],
         "broad": [],
     },
@@ -230,6 +306,8 @@ def _term_matches_text(term: str, target: str, allow_concept: bool = True) -> bo
     """
     Check if a query term or its concept synonyms match the target text (title or snippet).
     Respects word boundaries for short acronyms (e.g. AI, ML, CV, EHR).
+    Enforces directional concept matching: broad category query terms accept specialized
+    subtopics, while narrow subtopic query terms require their specific concept family.
     """
     t_lower = target.lower()
     term_l = term.lower()
@@ -245,21 +323,40 @@ def _term_matches_text(term: str, target: str, allow_concept: bool = True) -> bo
         if len(st) >= 4 and st in t_lower:
             return True
 
-    # 2. Concept cluster equivalence
+    # 2. Concept cluster / taxonomy matching
     if allow_concept:
         for c in CONCEPT_CLUSTERS:
-            c_terms = c["terms"]
-            b_terms = c.get("broad", [])
-            if any(term_l == ct or term_l in ct.split() for ct in c_terms):
-                for syn in c_terms + b_terms:
-                    if len(syn) <= 3:
-                        if re.search(r"\b" + re.escape(syn) + r"\b", t_lower):
+            primary = c.get("primary") or c.get("terms", [])
+            subtopics = c.get("subtopics") or c.get("broad", [])
+
+            # Case A: Query term is a primary category term (e.g. 'healthcare', 'ai', 'quantum')
+            # It matches if target contains ANY primary term OR ANY specialized subtopic
+            if any(term_l == p or term_l in p.split() for p in primary):
+                for cand in primary + subtopics:
+                    if len(cand) <= 3:
+                        if re.search(r"\b" + re.escape(cand) + r"\b", t_lower):
                             return True
                     else:
-                        if syn in t_lower:
+                        if cand in t_lower:
                             return True
-                        st_syn = _stem_term(syn)
-                        if len(st_syn) >= 4 and st_syn in t_lower:
+                        st_c = _stem_term(cand)
+                        if len(st_c) >= 4 and st_c in t_lower:
+                            return True
+
+            # Case B: Query term is a specific subtopic (e.g. 'pneumonia', 'transformer', 'radiology')
+            # It ONLY matches its specific subtopic family, preventing cross-contamination
+            # (e.g. query 'pneumonia' will NOT match sibling subtopics like 'hospital' or 'cardiology')
+            elif any(term_l == s or term_l in s.split() for s in subtopics):
+                matched_subs = [s for s in subtopics if term_l == s or term_l in s.split()]
+                for cand in matched_subs:
+                    if len(cand) <= 3:
+                        if re.search(r"\b" + re.escape(cand) + r"\b", t_lower):
+                            return True
+                    else:
+                        if cand in t_lower:
+                            return True
+                        st_c = _stem_term(cand)
+                        if len(st_c) >= 4 and st_c in t_lower:
                             return True
 
     return False
@@ -354,6 +451,49 @@ def check_source_relevance(
     title_core = [w for w in core_terms if _term_matches_text(w, title_lower, allow_concept=True)]
     snippet_core = [w for w in core_terms if _term_matches_text(w, snippet_lower, allow_concept=True)]
     all_matched_core = set(title_core).union(snippet_core)
+    query_str = ", ".join(query_words)
+
+    # Concept group consolidation: Group core terms that belong to the same concept cluster
+    # (e.g. 'artificial' and 'intelligence' are parts of the 'ai' cluster)
+    concept_groups: List[Dict[str, Any]] = []
+    clustered_terms: set = set()
+
+    for c in CONCEPT_CLUSTERS:
+        primary = c.get("primary") or c.get("terms", [])
+        subtopics = c.get("subtopics") or c.get("broad", [])
+        c_words = set()
+        for phrase in primary + subtopics:
+            for w in phrase.lower().split():
+                c_words.add(w)
+
+        c_core = [t for t in core_terms if t in c_words]
+        if c_core:
+            sat_title = any(t in title_core for t in c_core)
+            sat_snippet = any(t in snippet_core for t in c_core)
+            concept_groups.append({
+                "id": c["id"],
+                "terms": c_core,
+                "in_title": sat_title,
+                "in_snippet": sat_snippet,
+                "satisfied": sat_title or sat_snippet,
+            })
+            clustered_terms.update(c_core)
+
+    for t in core_terms:
+        if t not in clustered_terms:
+            sat_title = t in title_core
+            sat_snippet = t in snippet_core
+            concept_groups.append({
+                "id": t,
+                "terms": [t],
+                "in_title": sat_title,
+                "in_snippet": sat_snippet,
+                "satisfied": sat_title or sat_snippet,
+            })
+
+    num_groups = len(concept_groups)
+    sat_groups = [g for g in concept_groups if g["satisfied"]]
+    sat_ratio = len(sat_groups) / max(1, num_groups)
 
     # If full query phrase is in snippet and title has at least one core match
     if query.lower() in snippet_lower and len(concept_title_matches) > 0:
@@ -363,16 +503,21 @@ def check_source_relevance(
             f"Extract contains exact search phrase '{query}' and article title aligns with core terms.",
         )
 
-    # If all core terms are satisfied across title and snippet
-    if len(all_matched_core) == len(core_terms):
-        query_str = ", ".join(query_words)
+    # 1. All core terms or concept groups satisfied
+    if len(all_matched_core) == len(core_terms) or (num_groups > 0 and len(sat_groups) == num_groups):
+        if len(snippet_core) == 0:
+            return (
+                "relevant",
+                False,
+                f"Source title directly covers all key query terms ({query_str}).",
+            )
         return (
             "relevant",
             False,
             f"Source title and extract cover all key query terms ({query_str}).",
         )
 
-    # Single core term query and that core term is in title
+    # 2. Single core term query and that core term is in title
     if len(core_terms) == 1 and core_terms[0] in title_core:
         return (
             "relevant",
@@ -380,10 +525,20 @@ def check_source_relevance(
             f"Source title contains primary query term '{core_terms[0]}'.",
         )
 
-    # For multi-term queries (>= 2 core terms), if high proportion (>= 66%) of core concepts match
-    # with evidence in both title AND snippet
-    core_ratio = len(all_matched_core) / max(1, len(core_terms))
-    if len(core_terms) >= 2 and core_ratio >= 0.66 and len(title_core) >= 1 and len(snippet_core) >= 1:
+    # 3. When snippet/abstract is unavailable (e.g. Crossref records without abstract):
+    # Title alone must satisfy >= 66% of distinct concept groups with >= 2 distinct groups satisfied
+    title_sat_groups = [g for g in concept_groups if g["in_title"]]
+    if len(snippet_core) == 0:
+        if num_groups >= 3 and (len(title_sat_groups) / num_groups) >= 0.66 and len(title_sat_groups) >= 2:
+            matched_str = ", ".join(sorted(title_core))
+            return (
+                "relevant",
+                False,
+                f"Source title substantiates core query concepts ({matched_str}).",
+            )
+
+    # 4. Multi-term queries: high proportion (>= 66%) of distinct concept groups satisfied across title AND snippet
+    if num_groups >= 2 and sat_ratio >= 0.66 and len(title_core) >= 1 and len(snippet_core) >= 1:
         matched_str = ", ".join(sorted(all_matched_core))
         return (
             "relevant",
@@ -394,15 +549,17 @@ def check_source_relevance(
     # Otherwise weakly relevant
     if len(all_matched_core) > 0:
         matched_str = ", ".join(sorted(all_matched_core))
-        missing = [w for w in core_terms if w not in all_matched_core]
-        missing_str = ", ".join(missing)
+        missing_groups = [g for g in concept_groups if not g["satisfied"]]
+        missing = []
+        for g in missing_groups:
+            missing.extend(g["terms"])
+        missing_str = ", ".join(missing) if missing else ", ".join([w for w in core_terms if w not in all_matched_core])
         return (
             "weakly_relevant",
             True,
             f"Weakly related: Source mentions '{matched_str}' but lacks core query terms '{missing_str}'.",
         )
 
-    query_str = ", ".join(query_words)
     return (
         "weakly_relevant",
         True,
